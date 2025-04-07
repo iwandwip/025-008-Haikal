@@ -14,7 +14,7 @@ void setup() {
   menu.initialize(true);
   menu.setLen(16, 2);
 
-  sensor.addModule("rfid", new RFID_Mfrc522(5, 27));
+  // sensor.addModule("rfid", new RFID_Mfrc522(5, 27));
   sensor.addModule("rtc", []() -> BaseSens* {
     while (!isNTPClientInitialize) {
       ledRed.toggle();
@@ -31,13 +31,13 @@ void setup() {
 }
 
 void loop() {
-  sensor.update([]() {
-    String uuid = sensor["rfid"].as<String>();
-    // if (!uuid.isEmpty()) {
-    //   sensor.debug();
-    // }
-    // sensor.debug();
-  });
+  // sensor.update([]() {
+  //   // String uuid = sensor["rfid"].as<String>();
+  //   // if (!uuid.isEmpty()) {
+  //   //   sensor.debug();
+  //   // }
+  //   // sensor.debug();
+  // });
 
   usbSerial.receive(usbCommunicationTask);
 
@@ -53,6 +53,8 @@ void loop() {
   buttonUpStr = "";
   buttonDownStr = "";
   buttonOkStr = "";
+
+  ledRed.toggleAsync(2000);
 
   DigitalIn::updateAll(&buttonOk, &buttonUp, &buttonDown, DigitalIn::stop());
   DigitalOut::updateAll(&ledRed, &ledGreen, &ledYellow, &buzzer, &relaySolenoid, DigitalOut::stop());

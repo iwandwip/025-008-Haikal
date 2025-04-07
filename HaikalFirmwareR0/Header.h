@@ -17,18 +17,13 @@
 #define ENABLE_SENSOR_TCS3200
 #define ENABLE_SENSOR_RFID
 #define ENABLE_SENSOR_RTC
-#define ENABLE_CALIBRATE_RTC 1
-#if ENABLE_CALIBRATE_RTC
-#define CALIBRATE_RTC RTC_DS3231Sens::ALL, DateTime(F(__DATE__), F(__TIME__))
-#else
-#define CALIBRATE_RTC
-#endif
 
 #include "Kinematrix.h"
 #include "Preferences.h"
 #include "WiFi.h"
 #include "WiFiClientSecure.h"
 #include "ESP32Servo.h"
+#include "SPI.h"
 
 ////////// Utility //////////
 const char* ntpServer = "pool.ntp.org";
@@ -100,3 +95,6 @@ String buttonDownStr = "";
 String buttonOkStr = "";
 
 String uuidRFID = "";
+
+int checkRFIDState = 0;
+int isRFIDValid = 0;

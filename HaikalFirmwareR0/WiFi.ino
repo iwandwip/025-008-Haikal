@@ -71,12 +71,14 @@ void wifiTask() {
       }  // FIREBASE_RTDB_END
 
       static uint32_t firebaseFirestoreTimer;
-      if (millis() - firebaseFirestoreTimer >= 5000 && !uuidRFID.isEmpty()) {
+      if (millis() - firebaseFirestoreTimer >= 5000 && !uuidRFID.isEmpty() && checkRFIDState) {
         firebaseFirestoreTimer = millis();
 
         String userResultStr = firestore->getDocument("users", "", true);
         JsonDocument userDocument;
         deserializeJson(userDocument, userResultStr);
+
+        isRFIDValid = 0;
 
         for (JsonVariant fields : userDocument["documents"].as<JsonArray>()) {
           String rfid = fields["fields"]["rfid"]["stringValue"].as<String>();
@@ -84,92 +86,22 @@ void wifiTask() {
             Serial.print("| uuidRFID: ");
             Serial.print(uuidRFID);
             Serial.println();
+            isRFIDValid = 1;
             break;
           }
         }
+        checkRFIDState = 0;
       }
-
-      // if (!firestore->isReady()) {  // FIREBASE_FIRESTORE_START
-      //   // ledYellow.toggleAsync(250, [](bool state) {
-      //   //   Serial.println("Wait for Firestore Ready !!");
-      //   // });
-      // } else {
-      //   switch (firebaseFirestoreState) {
-      //     case FIRESTORE_CREATE:
-      //       Serial.print("| FIRESTORE_CREATE: ");
-      //       Serial.print(FIRESTORE_CREATE);
-      //       Serial.println();
-
-      //       documentData["fields"]["name"]["stringValue"] = "John Doe";
-      //       documentData["fields"]["age"]["integerValue"] = 30;
-      //       documentData["fields"]["active"]["booleanValue"] = true;
-      //       serializeJson(documentData, documentDataStr);
-
-      //       resultStr = firestore->createDocument("users/user1", documentDataStr, true);
-      //       Serial.print("| resultStr");
-      //       Serial.print(resultStr);
-      //       Serial.println();
-
-      //       firebaseFirestoreState = FIRESTORE_IDE;
-      //       break;
-      //     case FIRESTORE_READ:
-      //       Serial.print("| FIRESTORE_READ: ");
-      //       Serial.print(FIRESTORE_READ);
-      //       Serial.println();
-
-      //       resultStr = firestore->getDocument("users/user1", "", true);
-      //       Serial.print("| resultStr");
-      //       Serial.print(resultStr);
-      //       Serial.println();
-
-      //       firebaseFirestoreState = FIRESTORE_IDE;
-      //       break;
-      //     case FIRESTORE_UPDATE:
-      //       Serial.print("| FIRESTORE_UPDATE: ");
-      //       Serial.print(FIRESTORE_UPDATE);
-      //       Serial.println();
-
-      //       documentData["fields"]["name"]["stringValue"] = "John Doe " + String(random(0, 30));
-      //       documentData["fields"]["age"]["integerValue"] = random(0, 30);
-      //       serializeJson(documentData, documentDataStr);
-
-      //       resultStr = firestore->updateDocument("users/user1", documentDataStr, "name,age", true);
-      //       Serial.print("| resultStr");
-      //       Serial.print(resultStr);
-      //       Serial.println();
-
-      //       firebaseFirestoreState = FIRESTORE_IDE;
-      //       break;
-      //     case FIRESTORE_DELETE:
-      //       Serial.print("| FIRESTORE_DELETE: ");
-      //       Serial.print(FIRESTORE_DELETE);
-      //       Serial.println();
-
-      //       resultStr = firestore->deleteDocument("users/user1", true);
-      //       Serial.print("| resultStr");
-      //       Serial.print(resultStr);
-      //       Serial.println();
-
-      //       firebaseFirestoreState = FIRESTORE_IDE;
-      //       break;
-      //   }
-      // }  // FIREBASE_FIRESTORE_END
-
-      // if (!messaging->isReady()) {  // FIREBASE_MESSAGING_START
-      //   // ledYellow.toggleAsync(250, [](bool state) {
-      //   //   Serial.println("Wait for Mesagging Ready !!");
-      //   // });
-      // } else {
-      //   if (firebaseMessagingState == MESSAGING_SEND) {
-      //     messaging->clearMessage();
-      //     messaging->setToken(FIREBASE_MSG_DEVICE_TOKEN);
-      //     messaging->setNotification("Pesan dari ESP32", "Hallo ESP32");
-      //     messaging->setAndroidPriority(true);
-      //     resultStr = messaging->sendMessage(true);
-      //     Serial.println(resultStr);
-      //     firebaseMessagingState = MESSAGING_IDLE;
-      //   }
-      // }  // FIREBASE_MESSAGING_END
     }
   });
+}
+
+String generateRandomUID(uint8_t length) {
+  String result = "";
+  char hexChars[] = "0123456789abcdef";
+  result = "04";
+  for (uint8_t i = 2; i < length; i++) {
+    result += hexChars[random(16)];
+  }
+  return result;
 }

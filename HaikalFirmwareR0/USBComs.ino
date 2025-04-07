@@ -16,7 +16,28 @@ void usbCommunicationTask(const String& dataRecv) {
     if (dataHeader == "S") buttonDownStr = "S";
     if (dataHeader == "D") buttonOkStr = "D";
 
-    if (dataHeader == "UUID_RFID") uuidRFID = dataValue;  // UUID_RFID#111
+    if (dataHeader == "RFID_MASTER") {  // RFID_MASTER#111
+      uuidRFID = dataValue;
+      Serial.print("| RFID_MASTER: ");
+      Serial.print("| uuidRFID: ");
+      Serial.print(uuidRFID);
+      Serial.println();
+    }
+    if (dataHeader == "RFID_REGISTER") {  // RFID_REGISTER
+      Serial.print("| RFID_REGISTER: ");
+      Serial.print("| uuidRFID: ");
+      Serial.print(uuidRFID);
+      Serial.println();
+      uuidRFID = generateRandomUID(14);
+    }
+    if (dataHeader == "RFID_USER") {  // RFID_USER#04a2bc1f294e80
+      Serial.print("| RFID_USER: ");
+      Serial.print("| uuidRFID: ");
+      Serial.print(uuidRFID);
+      Serial.println();
+      uuidRFID = dataValue;
+    }
+
 
     // Firebase RTDB
     if (dataHeader == "RTDB_SET_VALUE") firebaseRTDBState = RTDB_SET_VALUE;
