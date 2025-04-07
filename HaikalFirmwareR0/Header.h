@@ -31,7 +31,7 @@
 #include "ESP32Servo.h"
 
 ////////// Utility //////////
-const char *ntpServer = "pool.ntp.org";
+const char* ntpServer = "pool.ntp.org";
 const long gmtOffset_sec = 7 * 3600;  // Offset for WIB (UTC+7)
 const int daylightOffset_sec = 0;
 
@@ -59,8 +59,8 @@ Servo servo;
 LcdMenu menu(0x27, 16, 2);
 DigitalOut buzzer(17);
 DigitalOut ledRed(13);
-DigitalOut ledGreen(12);
-DigitalOut ledYellow(14);
+DigitalOut ledGreen(14);
+DigitalOut ledYellow(12);
 DigitalOut relaySolenoid(33, true);
 
 ////////// Global Variable //////////
@@ -94,3 +94,9 @@ FirebaseFirestoreState firebaseFirestoreState = FIRESTORE_IDE;
 FirebaseMessagingState firebaseMessagingState = MESSAGING_IDLE;
 
 bool isNTPClientInitialize = false;
+
+String buttonUpStr = "";
+String buttonDownStr = "";
+String buttonOkStr = "";
+
+String uuidRFID = "";

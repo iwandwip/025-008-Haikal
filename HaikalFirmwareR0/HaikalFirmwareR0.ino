@@ -21,33 +21,38 @@ void setup() {
       delay(500);
     }
     DateTime timeNow(dateTimeNTP.getISO8601Time().c_str());
-    // DateTime timeNow(dateTimeNTP.getDateString().c_str(), dateTimeNTP.getTimeString().c_str());
-    // DateTime timeNow(dateTimeNTP.unixtime());
     return new RTC_DS3231Sens(RTC_DS3231Sens::ALL, timeNow);
   });
+  ledRed.on();
   sensor.addModule("tcs", new TCS3200Sens(4, 2, 16));
   sensor.init();
-  buzzer.toggleInit(100, 5);
+  ledGreen.toggleInit(100, 5);
+  ledGreen.on();
 }
 
 void loop() {
   sensor.update([]() {
     String uuid = sensor["rfid"].as<String>();
-    if (!uuid.isEmpty()) {
-      sensor.debug();
-    }
+    // if (!uuid.isEmpty()) {
+    //   sensor.debug();
+    // }
+    // sensor.debug();
   });
 
   usbSerial.receive(usbCommunicationTask);
 
   MenuCursor cursor{
-    .up = buttonUp.isPressed(),
-    .down = buttonDown.isPressed(),
-    .select = buttonOk.isPressed(),
+    .up = buttonUp.isPressed() || !buttonUpStr.isEmpty(),
+    .down = buttonDown.isPressed() || !buttonDownStr.isEmpty(),
+    .select = buttonOk.isPressed() || !buttonOkStr.isEmpty(),
     .back = false,
     .show = true
   };
   menu.onListen(&cursor, lcdMenuCallback);
+
+  buttonUpStr = "";
+  buttonDownStr = "";
+  buttonOkStr = "";
 
   DigitalIn::updateAll(&buttonOk, &buttonUp, &buttonDown, DigitalIn::stop());
   DigitalOut::updateAll(&ledRed, &ledGreen, &ledYellow, &buzzer, &relaySolenoid, DigitalOut::stop());
