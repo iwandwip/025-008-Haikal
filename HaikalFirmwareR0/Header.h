@@ -24,6 +24,7 @@
 #include "WiFiClientSecure.h"
 #include "ESP32Servo.h"
 #include "SPI.h"
+#include "HTTPClient.h"
 
 ////////// Utility //////////
 const char* ntpServer = "pool.ntp.org";
@@ -96,5 +97,14 @@ String buttonOkStr = "";
 
 String uuidRFID = "";
 
+String registerEmail = "";
+String registerPassword = "";
+String registerUsername = "";
+String registerRFID = "";
+unsigned long registerUserIdIndex = 0;
+
 int checkRFIDState = 0;
 int isRFIDValid = 0;
+
+int registerRFIDState = 0;
+int isRegisterRFIDValid = 0;

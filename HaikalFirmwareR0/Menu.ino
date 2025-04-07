@@ -1,14 +1,5 @@
 void lcdMenuCallback() {
   // "             "
-  // " Pengecekan  "
-  // "    RFID     "
-
-  // " RFID Master "
-  // "  Terdaftar  "
-
-  // " RFID Master "
-  // "Tdk Terdaftar"
-
   static auto menuUtama = menu.createMenu(2, "Bayar", "Daftar Akun");
   menu.onSelect(
     menuUtama, "Daftar Akun", []() {
@@ -57,13 +48,30 @@ void lcdMenuCallback() {
         menu.showMenu(menuDaftar4, true);
         menu.freeMenu(menuDaftar4);
         if (!uuidRFID.isEmpty()) {
-          Serial.print("| uuidRFID: ");
-          Serial.print(uuidRFID);
-          Serial.println();
-          uuidRFID = "";
+          while (registerRFIDState) {
+            ledRed.toggleDelay(100);
+          }
+          if (isRegisterRFIDValid) {
+            auto menuDaftar5 = menu.createMenu(2, "  Register   ", "  Berhasil   ");
+            menu.showMenu(menuDaftar5, true);
+            menu.wait(2000);
+            menu.freeMenu(menuDaftar5);
+            // "  Register   "
+            // " Email Anda  "
+            // "user001@gmail"
+            // "Password Anda"
+            // "user001"
+            auto menuDaftar6 = menu.createMenu(2, "  Register   ", "  Berhasil   ");
+            menu.showMenu(menuDaftar6, true);
+            menu.wait(2000);
+            menu.freeMenu(menuDaftar6);
+          } else {
+            auto menuDaftar7 = menu.createMenu(2, "  Register   ", "    Gagal    ");
+            menu.showMenu(menuDaftar7, true);
+            menu.wait(2000);
+            menu.freeMenu(menuDaftar7);
+          }
           // menu.setState(menuUtama, "Daftar Akun", 1);
-          // checkRFIDState = 1;
-          // isRFIDValid = 0;
         }
       }
     });

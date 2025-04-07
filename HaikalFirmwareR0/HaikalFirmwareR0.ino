@@ -2,6 +2,11 @@
 
 void setup() {
   usbSerial.begin(&Serial, 115200);
+
+  preferences.begin("haikal", false);
+  registerUserIdIndex = preferences.getULong("userIndex", 0);
+  preferences.end();
+
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
   ESP32PWM::allocateTimer(2);
@@ -54,7 +59,7 @@ void loop() {
   buttonDownStr = "";
   buttonOkStr = "";
 
-  ledRed.toggleAsync(2000);
+  ledRed.toggleAsync(100);
 
   DigitalIn::updateAll(&buttonOk, &buttonUp, &buttonDown, DigitalIn::stop());
   DigitalOut::updateAll(&ledRed, &ledGreen, &ledYellow, &buzzer, &relaySolenoid, DigitalOut::stop());

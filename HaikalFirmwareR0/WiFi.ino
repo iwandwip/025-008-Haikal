@@ -71,13 +71,11 @@ void wifiTask() {
       }  // FIREBASE_RTDB_END
 
       static uint32_t firebaseFirestoreTimer;
-      if (millis() - firebaseFirestoreTimer >= 5000 && !uuidRFID.isEmpty() && checkRFIDState) {
+      if (millis() - firebaseFirestoreTimer >= 5000 && !uuidRFID.isEmpty() && checkRFIDState == 1) {
         firebaseFirestoreTimer = millis();
-
         String userResultStr = firestore->getDocument("users", "", true);
         JsonDocument userDocument;
         deserializeJson(userDocument, userResultStr);
-
         isRFIDValid = 0;
 
         for (JsonVariant fields : userDocument["documents"].as<JsonArray>()) {
@@ -92,8 +90,51 @@ void wifiTask() {
         }
         checkRFIDState = 0;
       }
+
+      if (registerRFIDState == 1) {
+        isRegisterRFIDValid = apiRegisterAccount();
+        registerRFIDState = 0;
+      }
     }
   });
+}
+
+bool apiRegisterAccount() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi not connected");
+    return false;
+  }
+
+  HTTPClient http;
+  http.begin("https://api-3v67pndbka-uc.a.run.app/auth/register");
+  http.addHeader("Content-Type", "application/json");
+
+  JsonDocument jsonDoc;
+  jsonDoc["email"] = registerEmail;
+  jsonDoc["password"] = registerPassword;
+  jsonDoc["username"] = registerUsername;
+  jsonDoc["rfid"] = uuidRFID;
+
+  String requestBody;
+  serializeJson(jsonDoc, requestBody);
+
+  Serial.println("Sending request: " + requestBody);
+
+  int httpResponseCode = http.POST(requestBody);
+  if (httpResponseCode == 201 || httpResponseCode == 200) {
+    String payload = http.getString();
+    Serial.println("Registration successful: " + payload);
+    http.end();
+    return true;
+  } else {
+    Serial.println("Registration failed, error code: " + String(httpResponseCode));
+    if (httpResponseCode > 0) {
+      String payload = http.getString();
+      Serial.println("Response: " + payload);
+    }
+    http.end();
+    return false;
+  }
 }
 
 String generateRandomUID(uint8_t length) {

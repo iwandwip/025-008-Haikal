@@ -12,6 +12,7 @@ void usbCommunicationTask(const String& dataRecv) {
   } else {
     dataHeader.toUpperCase();
     if (dataHeader == "R") ESP.restart();
+    
     if (dataHeader == "W") buttonUpStr = "W";
     if (dataHeader == "S") buttonDownStr = "S";
     if (dataHeader == "D") buttonOkStr = "D";
@@ -37,7 +38,6 @@ void usbCommunicationTask(const String& dataRecv) {
       Serial.println();
       uuidRFID = dataValue;
     }
-
 
     // Firebase RTDB
     if (dataHeader == "RTDB_SET_VALUE") firebaseRTDBState = RTDB_SET_VALUE;
