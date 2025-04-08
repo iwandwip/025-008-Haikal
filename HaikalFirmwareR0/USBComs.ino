@@ -12,7 +12,7 @@ void usbCommunicationTask(const String& dataRecv) {
   } else {
     dataHeader.toUpperCase();
     if (dataHeader == "R") ESP.restart();
-    
+
     if (dataHeader == "W") buttonUpStr = "W";
     if (dataHeader == "S") buttonDownStr = "S";
     if (dataHeader == "D") buttonOkStr = "D";
@@ -37,6 +37,18 @@ void usbCommunicationTask(const String& dataRecv) {
       Serial.print(uuidRFID);
       Serial.println();
       uuidRFID = dataValue;
+    }
+
+    if (dataHeader == "SET_USER_INDEX") {  // SET_USER_INDEX#5
+      int setUserIndex = dataValue.toInt();
+      Serial.print("| setUserIndex: ");
+      Serial.print(setUserIndex);
+      Serial.println();
+      registerUserIdIndex = setUserIndex;
+
+      preferences.begin("haikal", false);
+      preferences.putULong("userIndex", registerUserIdIndex);
+      preferences.end();
     }
 
     // Firebase RTDB

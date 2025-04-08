@@ -89,9 +89,19 @@ void wifiTask() {
           }
         }
         checkRFIDState = 0;
+
+        Serial.print("| uuidRFID: ");
+        Serial.print(uuidRFID);
+        Serial.print("| checkRFIDState: ");
+        Serial.print(checkRFIDState);
+        Serial.print("| isRFIDValid: ");
+        Serial.print(isRFIDValid);
+        Serial.println();
       }
 
       if (registerRFIDState == 1) {
+        Serial.print("| apiRegisterAccount();");
+        Serial.println();
         isRegisterRFIDValid = apiRegisterAccount();
         registerRFIDState = 0;
       }
@@ -101,38 +111,65 @@ void wifiTask() {
 
 bool apiRegisterAccount() {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi not connected");
+    Serial.println("| WiFi not connected");
     return false;
   }
 
   HTTPClient http;
-  http.begin("https://api-3v67pndbka-uc.a.run.app/auth/register");
+  http.begin("https://apiv1-7shwi6rcka-et.a.run.app/register");
   http.addHeader("Content-Type", "application/json");
+
+  char emailBuffer[50];
+  char nameBuffer[50];
+  char phoneBuffer[50];
+  char passwordBuffer[50];
+
+  sprintf(emailBuffer, "user%03d@gmail.com", registerUserIdIndex);
+  sprintf(passwordBuffer, "user%03d", registerUserIdIndex);
+  sprintf(nameBuffer, "Username %03d", registerUserIdIndex);
+  sprintf(phoneBuffer, "628581234%03d", registerUserIdIndex);
+
+  registerEmail = emailBuffer;
+  registerPassword = passwordBuffer;
+  registerName = nameBuffer;
+  registerPhone = phoneBuffer;
+  registerRFID = uuidRFID;
 
   JsonDocument jsonDoc;
   jsonDoc["email"] = registerEmail;
   jsonDoc["password"] = registerPassword;
-  jsonDoc["username"] = registerUsername;
-  jsonDoc["rfid"] = uuidRFID;
+  jsonDoc["name"] = registerName;
+  jsonDoc["phone"] = registerPhone;
+  jsonDoc["rfid"] = registerRFID;
 
   String requestBody;
   serializeJson(jsonDoc, requestBody);
 
-  Serial.println("Sending request: " + requestBody);
+  Serial.println("| Sending request: " + requestBody);
 
   int httpResponseCode = http.POST(requestBody);
   if (httpResponseCode == 201 || httpResponseCode == 200) {
     String payload = http.getString();
-    Serial.println("Registration successful: " + payload);
+    Serial.println("| Registration successful: " + payload);
     http.end();
+
+    registerUserIdIndex++;
+    preferences.begin("haikal", false);
+    preferences.putULong("userIndex", registerUserIdIndex);
+    preferences.end();
     return true;
   } else {
-    Serial.println("Registration failed, error code: " + String(httpResponseCode));
+    Serial.println("| Registration failed, error code: " + String(httpResponseCode));
     if (httpResponseCode > 0) {
       String payload = http.getString();
       Serial.println("Response: " + payload);
     }
     http.end();
+
+    registerUserIdIndex++;
+    preferences.begin("haikal", false);
+    preferences.putULong("userIndex", registerUserIdIndex);
+    preferences.end();
     return false;
   }
 }

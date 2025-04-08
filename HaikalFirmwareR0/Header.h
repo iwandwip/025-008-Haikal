@@ -6,6 +6,7 @@
 #define ENABLE_MODULE_SERIAL_HARD
 #define ENABLE_MODULE_DATETIME_NTP_V2
 #define ENABLE_MODULE_LCD_MENU
+#define ENABLE_MODULE_KNN
 
 #define ENABLE_MODULE_FIREBASE_APPLICATION_V3
 #define ENABLE_MODULE_FIREBASE_RTDB_V3
@@ -38,6 +39,8 @@ FirebaseV3RTDB* firebase = nullptr;
 FirebaseV3Firestore* firestore = nullptr;
 FirebaseV3Messaging* messaging = nullptr;
 WiFiClientSecure client;
+
+KNN currencyKNN(5, 3, 30);
 
 ////////// Sensor //////////
 SensorModule sensor;
@@ -99,8 +102,10 @@ String uuidRFID = "";
 
 String registerEmail = "";
 String registerPassword = "";
-String registerUsername = "";
+String registerName = "";
+String registerPhone = "";
 String registerRFID = "";
+
 unsigned long registerUserIdIndex = 0;
 
 int checkRFIDState = 0;

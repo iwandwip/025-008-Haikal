@@ -3,6 +3,10 @@
 void setup() {
   usbSerial.begin(&Serial, 115200);
 
+  // preferences.begin("haikal", false);
+  // preferences.putULong("userIndex", 5);
+  // preferences.end();
+
   preferences.begin("haikal", false);
   registerUserIdIndex = preferences.getULong("userIndex", 0);
   preferences.end();
