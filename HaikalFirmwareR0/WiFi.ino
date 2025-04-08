@@ -52,6 +52,8 @@ void wifiTask() {
       if (firestore) firestore->loop();
       if (messaging) messaging->loop();
 
+      ledGreen.toggleAsync(100);
+
       if (!firebase->ready() || !firestore->isReady()) ledYellow.toggleAsync(150);
       else ledYellow.on();
 
@@ -70,32 +72,44 @@ void wifiTask() {
         firebaseRTDBTimer = millis();
       }  // FIREBASE_RTDB_END
 
-      static uint32_t firebaseFirestoreTimer;
-      if (millis() - firebaseFirestoreTimer >= 5000 && !uuidRFID.isEmpty() && checkRFIDState == 1) {
-        firebaseFirestoreTimer = millis();
+      if (!uuidRFID.isEmpty() && (checkRFIDMasterState || checkRFIDUserState)) {
         String userResultStr = firestore->getDocument("users", "", true);
         JsonDocument userDocument;
         deserializeJson(userDocument, userResultStr);
-        isRFIDValid = 0;
+
+        isRFIDMasterValid = 0;
+        isRFIDUserValid = 0;
 
         for (JsonVariant fields : userDocument["documents"].as<JsonArray>()) {
           String rfid = fields["fields"]["rfid"]["stringValue"].as<String>();
-          if (uuidRFID == rfid) {
+          String role = fields["fields"]["role"]["stringValue"].as<String>();
+          if (checkRFIDMasterState && uuidRFID == rfid && role == "admin") {
+            Serial.print("| checkRFIDMasterState: ");
             Serial.print("| uuidRFID: ");
             Serial.print(uuidRFID);
             Serial.println();
-            isRFIDValid = 1;
+            isRFIDMasterValid = 1;
+            break;
+          }
+          if (checkRFIDUserState && uuidRFID == rfid && role == "user") {
+            Serial.print("| checkRFIDUserState: ");
+            Serial.print("| uuidRFID: ");
+            Serial.print(uuidRFID);
+            Serial.println();
+            isRFIDUserValid = 1;
             break;
           }
         }
-        checkRFIDState = 0;
+
+        checkRFIDMasterState = 0;
+        checkRFIDUserState = 0;
 
         Serial.print("| uuidRFID: ");
         Serial.print(uuidRFID);
-        Serial.print("| checkRFIDState: ");
-        Serial.print(checkRFIDState);
-        Serial.print("| isRFIDValid: ");
-        Serial.print(isRFIDValid);
+        Serial.print("| checkRFIDMasterState: ");
+        Serial.print(checkRFIDMasterState);
+        Serial.print("| isRFIDMasterValid: ");
+        Serial.print(isRFIDMasterValid);
         Serial.println();
       }
 
@@ -154,7 +168,7 @@ bool apiRegisterAccount() {
     http.end();
 
     registerUserIdIndex++;
-    preferences.begin("haikal", false);
+    preferences.begin(clientName.c_str(), false);
     preferences.putULong("userIndex", registerUserIdIndex);
     preferences.end();
     return true;
@@ -167,7 +181,7 @@ bool apiRegisterAccount() {
     http.end();
 
     registerUserIdIndex++;
-    preferences.begin("haikal", false);
+    preferences.begin(clientName.c_str(), false);
     preferences.putULong("userIndex", registerUserIdIndex);
     preferences.end();
     return false;

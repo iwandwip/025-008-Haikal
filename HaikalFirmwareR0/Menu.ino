@@ -2,11 +2,36 @@ void lcdMenuCallback() {
   // "             "
   // static auto menuUtama = menu.createMenu(3, "Bayar", "Daftar Akun", "Check RFID");
   static auto menuUtama = menu.createMenu(2, "Bayar", "Daftar Akun");
+
+  menu.onSelect(
+    menuUtama, "Bayar", []() {
+      uuidRFID = "";
+      paymentRFIDState = 0;
+      isPaymentRFIDValid = 0;
+      menu.setState(menuUtama, "Bayar", 0);
+    },
+    [](int state) {
+      if (state == 0) {
+        auto menuBayar = menu.createMenu(2, " Silakan Tap ", "  RFID Anda  ");
+        menu.showMenu(menuBayar, true);
+        menu.freeMenu(menuBayar);
+        if (!uuidRFID.isEmpty()) {
+          menu.setState(menuUtama, "Bayar", 1);
+          paymentRFIDState = 1;
+          isPaymentRFIDValid = 0;
+        }
+      } else if (state == 1) {
+        //
+      } else if (state == 2) {
+        //
+      }
+    });
+
   menu.onSelect(
     menuUtama, "Daftar Akun", []() {
       uuidRFID = "";
-      checkRFIDState = 0;
-      isRFIDValid = 0;
+      checkRFIDMasterState = 0;
+      isRFIDMasterValid = 0;
       registerRFIDState = 0;
       isRegisterRFIDValid = 0;
       menu.setState(menuUtama, "Daftar Akun", 0);
@@ -31,19 +56,19 @@ void lcdMenuCallback() {
         menu.freeMenu(menuDaftar);
         if (!uuidRFID.isEmpty()) {
           menu.setState(menuUtama, "Daftar Akun", 1);
-          checkRFIDState = 1;
-          isRFIDValid = 0;
+          checkRFIDMasterState = 1;
+          isRFIDMasterValid = 0;
         }
       } else if (state == 1) {
         auto menuDaftar = menu.createMenu(2, " Pengecekan  ", "    RFID     ");
         menu.showMenu(menuDaftar, true);
         menu.wait(2000);
         menu.freeMenu(menuDaftar);
-        while (checkRFIDState) {
+        while (checkRFIDMasterState) {
           ledRed.toggleDelay(100);
         }
         ledRed.on();
-        if (isRFIDValid) {
+        if (isRFIDMasterValid) {
           auto menuDaftar1 = menu.createMenu(2, " RFID Master ", "  Terdaftar  ");
           menu.showMenu(menuDaftar1, true);
           menu.wait(2000);

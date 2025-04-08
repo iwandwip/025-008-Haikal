@@ -3,11 +3,11 @@
 void setup() {
   usbSerial.begin(&Serial, 115200);
 
-  // preferences.begin("haikal", false);
+  // preferences.begin(clientName.c_str(), false);
   // preferences.putULong("userIndex", 5);
   // preferences.end();
 
-  preferences.begin("haikal", false);
+  preferences.begin(clientName.c_str(), false);
   registerUserIdIndex = preferences.getULong("userIndex", 0);
   preferences.end();
 
@@ -35,18 +35,18 @@ void setup() {
   ledRed.on();
   sensor.addModule("tcs", new TCS3200Sens(4, 2, 16));
   sensor.init();
-  ledGreen.toggleInit(100, 5);
-  ledGreen.on();
+  // ledGreen.toggleInit(100, 5);
+  // ledGreen.on();
 }
 
 void loop() {
-  // sensor.update([]() {
-  //   // String uuid = sensor["rfid"].as<String>();
-  //   // if (!uuid.isEmpty()) {
-  //   //   sensor.debug();
-  //   // }
-  //   // sensor.debug();
-  // });
+  sensor.update([]() {
+    // String uuid = sensor["rfid"].as<String>();
+    // if (!uuid.isEmpty()) {
+    //   sensor.debug();
+    // }
+    // sensor.debug();
+  });
 
   usbSerial.receive(usbCommunicationTask);
 

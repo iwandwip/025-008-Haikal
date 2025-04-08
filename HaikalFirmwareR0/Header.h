@@ -93,6 +93,7 @@ FirebaseFirestoreState firebaseFirestoreState = FIRESTORE_IDE;
 FirebaseMessagingState firebaseMessagingState = MESSAGING_IDLE;
 
 bool isNTPClientInitialize = false;
+String clientName = "haikal";
 
 String buttonUpStr = "";
 String buttonDownStr = "";
@@ -108,8 +109,14 @@ String registerRFID = "";
 
 unsigned long registerUserIdIndex = 0;
 
-int checkRFIDState = 0;
-int isRFIDValid = 0;
+int checkRFIDMasterState = 0;
+int isRFIDMasterValid = 0;
+
+int checkRFIDUserState = 0;
+int isRFIDUserValid = 0;
 
 int registerRFIDState = 0;
 int isRegisterRFIDValid = 0;
+
+int paymentRFIDState = 0;
+int isPaymentRFIDValid = 0;

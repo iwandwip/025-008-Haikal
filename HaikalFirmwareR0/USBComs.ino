@@ -46,7 +46,7 @@ void usbCommunicationTask(const String& dataRecv) {
       Serial.println();
       registerUserIdIndex = setUserIndex;
 
-      preferences.begin("haikal", false);
+      preferences.begin(clientName.c_str(), false);
       preferences.putULong("userIndex", registerUserIdIndex);
       preferences.end();
     }
