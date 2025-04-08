@@ -101,16 +101,24 @@ void wifiTask() {
           }
         }
 
-        checkRFIDMasterState = 0;
-        checkRFIDUserState = 0;
-
         Serial.print("| uuidRFID: ");
         Serial.print(uuidRFID);
-        Serial.print("| checkRFIDMasterState: ");
-        Serial.print(checkRFIDMasterState);
-        Serial.print("| isRFIDMasterValid: ");
-        Serial.print(isRFIDMasterValid);
+        if (checkRFIDMasterState) {
+          Serial.print("| checkRFIDMasterState: ");
+          Serial.print(checkRFIDMasterState);
+          Serial.print("| isRFIDMasterValid: ");
+          Serial.print(isRFIDMasterValid);
+        }
+        if (checkRFIDUserState) {
+          Serial.print("| checkRFIDUserState: ");
+          Serial.print(checkRFIDUserState);
+          Serial.print("| isRFIDUserValid: ");
+          Serial.print(isRFIDUserValid);
+        }
         Serial.println();
+
+        checkRFIDMasterState = 0;
+        checkRFIDUserState = 0;
       }
 
       if (registerRFIDState == 1) {
