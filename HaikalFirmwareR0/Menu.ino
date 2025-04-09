@@ -6,6 +6,8 @@ void lcdMenuCallback() {
   menu.onSelect(
     menuUtama, "Bayar", []() {
       uuidRFID = "";
+      checkRFIDUserState = 0;
+      isRFIDUserValid = 0;
       paymentRFIDState = 0;
       isPaymentRFIDValid = 0;
       menu.setState(menuUtama, "Bayar", 0);
@@ -17,8 +19,8 @@ void lcdMenuCallback() {
         menu.freeMenu(menuBayar);
         if (!uuidRFID.isEmpty()) {
           menu.setState(menuUtama, "Bayar", 1);
-          paymentRFIDState = 1;
-          isPaymentRFIDValid = 0;
+          checkRFIDUserState = 1;
+          isRFIDUserValid = 0;
         }
       } else if (state == 1) {
         //
