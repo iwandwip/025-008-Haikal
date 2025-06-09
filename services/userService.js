@@ -1,11 +1,10 @@
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { calculateAge } from '../utils/ageCalculator';
 
 export const createUserProfile = async (uid, profileData) => {
   try {
     if (!db) {
-      console.warn('Firestore is not initialized, skipping profile creation');
+      console.warn('Firestore belum diinisialisasi, skip pembuatan profil');
       return { 
         success: true, 
         profile: { 
@@ -17,41 +16,25 @@ export const createUserProfile = async (uid, profileData) => {
       };
     }
 
-    let userProfile;
+    const userProfile = {
+      id: uid,
+      email: profileData.email,
+      nama: profileData.nama,
+      noHp: profileData.noHp,
+      role: profileData.role,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
-    if (profileData.role === 'admin' || profileData.isAdmin) {
-      userProfile = {
-        id: uid,
-        email: profileData.email,
-        name: profileData.name || 'Admin',
-        role: 'admin',
-        isAdmin: true,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-    } else {
-      const age = calculateAge(profileData.birthdate);
-
-      userProfile = {
-        id: uid,
-        email: profileData.email,
-        name: profileData.name,
-        birthdate: profileData.birthdate,
-        gender: profileData.gender,
-        ageYears: age.years,
-        ageMonths: age.months,
-        role: 'user',
-        isAdmin: false,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
+    if (profileData.role === 'user') {
+      userProfile.rfidSantri = profileData.rfidSantri || "";
     }
 
     await setDoc(doc(db, 'users', uid), userProfile);
-    console.log('User profile created successfully');
+    console.log('Profil user berhasil dibuat');
     return { success: true, profile: userProfile };
   } catch (error) {
-    console.error('Create user profile error:', error);
+    console.error('Error membuat profil user:', error);
     return { success: false, error: error.message };
   }
 };
@@ -59,10 +42,10 @@ export const createUserProfile = async (uid, profileData) => {
 export const getUserProfile = async (uid) => {
   try {
     if (!db) {
-      console.warn('Firestore is not initialized, returning fallback profile');
+      console.warn('Firestore belum diinisialisasi, return fallback profil');
       return { 
         success: false, 
-        error: 'Firestore not available' 
+        error: 'Firestore tidak tersedia' 
       };
     }
 
@@ -71,35 +54,12 @@ export const getUserProfile = async (uid) => {
 
     if (docSnap.exists()) {
       const profile = docSnap.data();
-      
-      if (profile.role === 'admin' || profile.isAdmin) {
-        return { success: true, profile };
-      }
-      
-      if (profile.birthdate) {
-        const age = calculateAge(profile.birthdate);
-        if (profile.ageYears !== age.years || profile.ageMonths !== age.months) {
-          try {
-            await updateDoc(docRef, {
-              ageYears: age.years,
-              ageMonths: age.months,
-              updatedAt: new Date()
-            });
-            
-            profile.ageYears = age.years;
-            profile.ageMonths = age.months;
-          } catch (updateError) {
-            console.warn('Could not update age, continuing with existing data:', updateError);
-          }
-        }
-      }
-      
       return { success: true, profile };
     } else {
-      return { success: false, error: 'User profile not found' };
+      return { success: false, error: 'Profil user tidak ditemukan' };
     }
   } catch (error) {
-    console.error('Get user profile error:', error);
+    console.error('Error mengambil profil user:', error);
     return { success: false, error: error.message };
   }
 };
@@ -107,26 +67,21 @@ export const getUserProfile = async (uid) => {
 export const updateUserProfile = async (uid, updates) => {
   try {
     if (!db) {
-      throw new Error('Firestore is not initialized');
+      throw new Error('Firestore belum diinisialisasi');
     }
 
-    const updateData = { ...updates };
-    
-    if (updates.birthdate) {
-      const age = calculateAge(updates.birthdate);
-      updateData.ageYears = age.years;
-      updateData.ageMonths = age.months;
-    }
-    
-    updateData.updatedAt = new Date();
+    const updateData = { 
+      ...updates,
+      updatedAt: new Date()
+    };
 
     const userRef = doc(db, 'users', uid);
     await updateDoc(userRef, updateData);
 
-    console.log('User profile updated successfully');
+    console.log('Profil user berhasil diupdate');
     return { success: true };
   } catch (error) {
-    console.error('Update user profile error:', error);
+    console.error('Error update profil user:', error);
     return { success: false, error: error.message };
   }
 };

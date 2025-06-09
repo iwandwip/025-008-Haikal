@@ -2,43 +2,38 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
-  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { createUserProfile } from './userService';
 
 const handleAuthError = (error) => {
   const errorMessages = {
-    'auth/user-not-found': 'No user found with this email.',
-    'auth/wrong-password': 'Incorrect password.',
-    'auth/email-already-in-use': 'Email is already registered.',
-    'auth/weak-password': 'Password should be at least 6 characters.',
-    'auth/invalid-email': 'Invalid email address.',
-    'auth/network-request-failed': 'Network error. Please check your connection.',
-    'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
-    'auth/user-disabled': 'This account has been disabled.',
-    'auth/invalid-credential': 'Invalid email or password.',
-    'auth/configuration-not-found': 'Firebase configuration error. Please check setup.',
+    'auth/user-not-found': 'Email tidak terdaftar.',
+    'auth/wrong-password': 'Password salah.',
+    'auth/email-already-in-use': 'Email sudah terdaftar.',
+    'auth/weak-password': 'Password minimal 6 karakter.',
+    'auth/invalid-email': 'Format email tidak valid.',
+    'auth/network-request-failed': 'Periksa koneksi internet Anda.',
+    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi nanti.',
+    'auth/user-disabled': 'Akun ini telah dinonaktifkan.',
+    'auth/invalid-credential': 'Email atau password salah.',
+    'auth/configuration-not-found': 'Konfigurasi Firebase error.',
   };
-  return errorMessages[error.code] || `Authentication error: ${error.message}`;
-};
-
-const isAdminEmail = (email) => {
-  return email === 'admin@gmail.com';
+  return errorMessages[error.code] || `Error: ${error.message}`;
 };
 
 export const signInWithEmail = async (email, password) => {
   try {
     if (!auth) {
-      throw new Error('Firebase Auth is not initialized. Please check your configuration.');
+      throw new Error('Firebase Auth belum diinisialisasi.');
     }
     
-    console.log('Attempting to sign in with email:', email);
+    console.log('Mencoba login dengan email:', email);
     const result = await signInWithEmailAndPassword(auth, email, password);
-    console.log('Sign in successful');
+    console.log('Login berhasil');
     return { success: true, user: result.user };
   } catch (error) {
-    console.error('Sign in error:', error);
+    console.error('Error login:', error);
     return { success: false, error: handleAuthError(error) };
   }
 };
@@ -46,29 +41,16 @@ export const signInWithEmail = async (email, password) => {
 export const signUpWithEmail = async (email, password, profileData) => {
   try {
     if (!auth) {
-      throw new Error('Firebase Auth is not initialized. Please check your configuration.');
+      throw new Error('Firebase Auth belum diinisialisasi.');
     }
 
-    console.log('Attempting to create account for:', email);
+    console.log('Mencoba membuat akun untuk:', email);
     const result = await createUserWithEmailAndPassword(auth, email, password);
     
-    let profilePayload;
-    
-    if (isAdminEmail(email)) {
-      profilePayload = {
-        email,
-        name: 'Admin',
-        role: 'admin',
-        isAdmin: true
-      };
-    } else {
-      profilePayload = {
-        email,
-        ...profileData,
-        role: 'user',
-        isAdmin: false
-      };
-    }
+    const profilePayload = {
+      email,
+      ...profileData,
+    };
 
     const profileResult = await createUserProfile(result.user.uid, profilePayload);
 
@@ -76,15 +58,15 @@ export const signUpWithEmail = async (email, password, profileData) => {
       try {
         await result.user.delete();
       } catch (deleteError) {
-        console.error('Error deleting user after profile creation failure:', deleteError);
+        console.error('Error menghapus user setelah gagal buat profil:', deleteError);
       }
       throw new Error(profileResult.error);
     }
 
-    console.log('Account created successfully');
+    console.log('Akun berhasil dibuat');
     return { success: true, user: result.user, profile: profileResult.profile };
   } catch (error) {
-    console.error('Sign up error:', error);
+    console.error('Error registrasi:', error);
     return { success: false, error: handleAuthError(error) };
   }
 };
@@ -92,27 +74,13 @@ export const signUpWithEmail = async (email, password, profileData) => {
 export const signOutUser = async () => {
   try {
     if (!auth) {
-      throw new Error('Firebase Auth is not initialized');
+      throw new Error('Firebase Auth belum diinisialisasi');
     }
     await signOut(auth);
-    console.log('Sign out successful');
+    console.log('Logout berhasil');
     return { success: true };
   } catch (error) {
-    console.error('Sign out error:', error);
-    return { success: false, error: handleAuthError(error) };
-  }
-};
-
-export const resetPassword = async (email) => {
-  try {
-    if (!auth) {
-      throw new Error('Firebase Auth is not initialized');
-    }
-    await sendPasswordResetEmail(auth, email);
-    console.log('Password reset email sent');
-    return { success: true };
-  } catch (error) {
-    console.error('Password reset error:', error);
+    console.error('Error logout:', error);
     return { success: false, error: handleAuthError(error) };
   }
 };

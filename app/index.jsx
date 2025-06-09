@@ -6,34 +6,36 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { Colors } from "../constants/Colors";
 
 export default function Index() {
-  const { currentUser, loading, authInitialized, isAdmin } = useAuth();
+  const { currentUser, loading, authInitialized, userProfile } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (authInitialized && !loading) {
-      if (currentUser) {
-        if (isAdmin) {
+      if (currentUser && userProfile) {
+        if (userProfile.role === "admin") {
           router.replace("/(admin)");
-        } else {
+        } else if (userProfile.role === "user") {
           router.replace("/(tabs)");
+        } else {
+          router.replace("/role-selection");
         }
       } else {
-        router.replace("/(auth)/login");
+        router.replace("/role-selection");
       }
     }
-  }, [currentUser, loading, authInitialized, isAdmin]);
+  }, [currentUser, loading, authInitialized, userProfile]);
 
   if (!authInitialized || loading) {
     return (
       <View style={styles.container}>
-        <LoadingSpinner text="Initializing..." />
+        <LoadingSpinner text="Memuat..." />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <LoadingSpinner text="Redirecting..." />
+      <LoadingSpinner text="Mengarahkan..." />
     </View>
   );
 }

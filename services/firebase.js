@@ -4,13 +4,13 @@ import { getFirestore } from 'firebase/firestore';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyBHSeu7JWQ8NNuT2FYPYObT9l9YCncFBqc",
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "intan-d626d.firebaseapp.com",
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "intan-d626d",
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "intan-d626d.firebasestorage.app",
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "1063475686444",
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:1063475686444:web:715d6c673dc8c702b5b589",
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-4B5XMKYM54"
+  apiKey: "AIzaSyAqnV4ykbphnJbFJibISVcLS2m-F3BrJbg",
+  authDomain: "haikal-39391.firebaseapp.com",
+  projectId: "haikal-39391",
+  storageBucket: "haikal-39391.firebasestorage.app",
+  messagingSenderId: "405686936491",
+  appId: "1:405686936491:web:877cb90133189e03e768ee",
+  measurementId: "G-P15RR8FNEK"
 };
 
 let app;
