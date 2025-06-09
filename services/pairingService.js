@@ -57,7 +57,8 @@ export const cancelPairing = async () => {
       await updateDoc(docRef, {
         isActive: false,
         status: 'cancelled',
-        cancelledTime: new Date()
+        cancelledTime: new Date(),
+        rfidCode: null
       });
     }
 

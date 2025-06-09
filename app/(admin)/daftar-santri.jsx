@@ -22,14 +22,14 @@ export default function DaftarSantri() {
 
   const loadSantri = async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
-    
+
     const result = await getAllSantri();
     if (result.success) {
       setSantriList(result.data);
     } else {
       console.error("Error loading santri:", result.error);
     }
-    
+
     if (!isRefresh) setLoading(false);
   };
 
@@ -52,7 +52,7 @@ export default function DaftarSantri() {
   const handleSantriPress = (santri) => {
     router.push({
       pathname: "/(admin)/detail-santri",
-      params: { santriId: santri.id }
+      params: { santriId: santri.id },
     });
   };
 
@@ -67,7 +67,7 @@ export default function DaftarSantri() {
         <Text style={styles.namaWali}>Wali: {item.namaWali}</Text>
         <Text style={styles.noHp}>HP: {item.noHpWali}</Text>
       </View>
-      
+
       <View style={styles.rfidSection}>
         {item.rfidSantri ? (
           <View style={styles.rfidActive}>
@@ -122,8 +122,8 @@ export default function DaftarSantri() {
             Total Santri: {santriList.length}
           </Text>
           <Text style={styles.statsSubtext}>
-            RFID Terpasang: {santriList.filter(s => s.rfidSantri).length} | 
-            Belum: {santriList.filter(s => !s.rfidSantri).length}
+            RFID Terpasang: {santriList.filter((s) => s.rfidSantri).length} |
+            Belum: {santriList.filter((s) => !s.rfidSantri).length}
           </Text>
         </View>
 
@@ -183,3 +183,116 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  statsSection: {
+    marginBottom: 20,
+    backgroundColor: "#fff",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  statsText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  statsSubtext: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  santriCard: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  santriInfo: {
+    flex: 1,
+  },
+  namaSantri: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  namaWali: {
+    fontSize: 14,
+    color: "#64748b",
+    marginBottom: 2,
+  },
+  noHp: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  rfidSection: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  rfidActive: {
+    alignItems: "center",
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  rfidInactive: {
+    alignItems: "center",
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  rfidLabel: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: "#374151",
+  },
+  rfidValue: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  arrowText: {
+    fontSize: 16,
+    color: "#94a3b8",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#64748b",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#94a3b8",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+});

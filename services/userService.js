@@ -156,9 +156,30 @@ export const deleteSantri = async (santriId) => {
     }
 
     const userRef = doc(db, 'users', santriId);
-    await deleteDoc(userRef);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('Data santri tidak ditemukan');
+    }
 
+    const userData = userDoc.data();
+    const userEmail = userData.email;
+
+    await deleteDoc(userRef);
     console.log('Data santri berhasil dihapus dari Firestore');
+
+    if (auth && userEmail) {
+      try {
+        const userRecord = await auth.getUserByEmail(userEmail);
+        if (userRecord) {
+          await deleteUser(userRecord);
+          console.log('User auth berhasil dihapus');
+        }
+      } catch (authError) {
+        console.warn('User auth tidak ditemukan atau sudah terhapus:', authError.message);
+      }
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error menghapus santri:', error);

@@ -2,6 +2,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  deleteUser,
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { createUserProfile } from './userService';
@@ -56,7 +57,8 @@ export const signUpWithEmail = async (email, password, profileData) => {
 
     if (!profileResult.success) {
       try {
-        await result.user.delete();
+        await deleteUser(result.user);
+        console.log('User auth berhasil dihapus setelah gagal buat profil');
       } catch (deleteError) {
         console.error('Error menghapus user setelah gagal buat profil:', deleteError);
       }
@@ -81,6 +83,21 @@ export const signOutUser = async () => {
     return { success: true };
   } catch (error) {
     console.error('Error logout:', error);
+    return { success: false, error: handleAuthError(error) };
+  }
+};
+
+export const deleteUserAuth = async (user) => {
+  try {
+    if (!auth || !user) {
+      throw new Error('Firebase Auth atau user tidak tersedia');
+    }
+    
+    await deleteUser(user);
+    console.log('User auth berhasil dihapus');
+    return { success: true };
+  } catch (error) {
+    console.error('Error menghapus user auth:', error);
     return { success: false, error: handleAuthError(error) };
   }
 };
