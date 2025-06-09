@@ -12,7 +12,11 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Button from "../../components/ui/Button";
 import LoadingSpinner from "../../components/ui/LoadingSpinner";
-import { getUserProfile } from "../../services/userService";
+import {
+  getUserProfile,
+  deleteSantri,
+  updateSantriRFID,
+} from "../../services/userService";
 import {
   startPairing,
   cancelPairing,
@@ -81,11 +85,14 @@ export default function DetailSantri() {
         {
           text: "Simpan",
           onPress: async () => {
-            // Update RFID santri di database
-            // Implementasi update RFID akan ditambahkan
+            const result = await updateSantriRFID(santriId, rfidCode);
             await cancelPairing();
-            Alert.alert("Berhasil", "RFID berhasil dipasangkan!");
-            loadSantriData();
+            if (result.success) {
+              Alert.alert("Berhasil", "RFID berhasil dipasangkan!");
+              loadSantriData();
+            } else {
+              Alert.alert("Error", "Gagal menyimpan RFID");
+            }
           },
         },
       ]
@@ -125,6 +132,37 @@ export default function DetailSantri() {
                 "Pairing RFID telah dibatalkan"
               );
               loadPairingStatus();
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleEditSantri = () => {
+    router.push({
+      pathname: "/(admin)/edit-santri",
+      params: { santriId: santriId },
+    });
+  };
+
+  const handleDeleteSantri = () => {
+    Alert.alert(
+      "Hapus Santri",
+      `Apakah Anda yakin ingin menghapus data ${santri?.namaSantri}?\n\nTindakan ini tidak dapat dibatalkan dan akan menghapus:\n• Data santri\n• Akun wali santri\n• Semua data terkait`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Ya, Hapus",
+          style: "destructive",
+          onPress: async () => {
+            const result = await deleteSantri(santriId);
+            if (result.success) {
+              Alert.alert("Berhasil", "Data santri berhasil dihapus", [
+                { text: "OK", onPress: () => router.back() },
+              ]);
+            } else {
+              Alert.alert("Error", result.error);
             }
           },
         },
@@ -193,6 +231,23 @@ export default function DetailSantri() {
           </View>
           <Text style={styles.namaSantri}>{santri.namaSantri}</Text>
           <Text style={styles.santriId}>ID: {santri.id}</Text>
+        </View>
+
+        <View style={styles.actionSection}>
+          <View style={styles.actionButtons}>
+            <Button
+              title="✏️ Edit Data"
+              onPress={handleEditSantri}
+              variant="secondary"
+              style={styles.editButton}
+            />
+            <Button
+              title="🗑️ Hapus Santri"
+              onPress={handleDeleteSantri}
+              variant="outline"
+              style={styles.deleteButton}
+            />
+          </View>
         </View>
 
         <View style={styles.infoSection}>
@@ -342,7 +397,7 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 24,
   },
   avatarContainer: {
     width: 80,
@@ -368,6 +423,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748b",
     fontFamily: "monospace",
+  },
+  actionSection: {
+    marginBottom: 24,
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  editButton: {
+    flex: 1,
+    backgroundColor: "#10b981",
+  },
+  deleteButton: {
+    flex: 1,
+    borderColor: "#ef4444",
   },
   infoSection: {
     marginBottom: 32,

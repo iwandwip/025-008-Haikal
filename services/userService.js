@@ -3,12 +3,14 @@ import {
   setDoc, 
   getDoc, 
   updateDoc, 
+  deleteDoc,
   collection, 
   getDocs, 
   query, 
   where 
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { deleteUser } from 'firebase/auth';
+import { db, auth } from './firebase';
 
 export const createUserProfile = async (uid, profileData) => {
   try {
@@ -143,6 +145,23 @@ export const updateSantriRFID = async (santriId, rfidCode) => {
     return { success: true };
   } catch (error) {
     console.error('Error update RFID santri:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const deleteSantri = async (santriId) => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const userRef = doc(db, 'users', santriId);
+    await deleteDoc(userRef);
+
+    console.log('Data santri berhasil dihapus dari Firestore');
+    return { success: true };
+  } catch (error) {
+    console.error('Error menghapus santri:', error);
     return { success: false, error: error.message };
   }
 };

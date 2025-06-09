@@ -8,6 +8,7 @@ export default function AdminLayout() {
       <Stack.Screen name="tambah-santri" />
       <Stack.Screen name="daftar-santri" />
       <Stack.Screen name="detail-santri" />
+      <Stack.Screen name="edit-santri" />
     </Stack>
   );
 }
