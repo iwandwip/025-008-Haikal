@@ -7,7 +7,6 @@ export default function AuthLayout() {
       <Stack.Screen name="admin-login" />
       <Stack.Screen name="admin-register" />
       <Stack.Screen name="wali-login" />
-      <Stack.Screen name="wali-register" />
     </Stack>
   );
 }

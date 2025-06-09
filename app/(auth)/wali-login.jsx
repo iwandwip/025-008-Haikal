@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
@@ -56,9 +56,12 @@ export default function WaliLogin() {
 
         <View style={styles.content}>
           <View style={styles.titleSection}>
-            <Text style={styles.title}>Login Wali Santri</Text>
+            <Text style={styles.title}>Masuk Wali Santri</Text>
             <Text style={styles.subtitle}>
               Masuk untuk memantau dan membayar bisyaroh
+            </Text>
+            <Text style={styles.infoText}>
+              Belum punya akun? Hubungi admin TPQ untuk pendaftaran
             </Text>
           </View>
 
@@ -86,13 +89,6 @@ export default function WaliLogin() {
               disabled={loading}
               style={styles.loginButton}
             />
-          </View>
-
-          <View style={styles.registerSection}>
-            <Text style={styles.registerText}>Belum memiliki akun?</Text>
-            <Link href="/(auth)/wali-register" style={styles.registerLink}>
-              Daftar Sekarang
-            </Link>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -140,6 +136,16 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
     lineHeight: 24,
+    marginBottom: 16,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#059669",
+    textAlign: "center",
+    backgroundColor: "#dcfce7",
+    padding: 12,
+    borderRadius: 8,
+    lineHeight: 20,
   },
   formSection: {
     marginBottom: 32,
@@ -147,18 +153,5 @@ const styles = StyleSheet.create({
   loginButton: {
     marginTop: 8,
     backgroundColor: "#10b981",
-  },
-  registerSection: {
-    alignItems: "center",
-  },
-  registerText: {
-    fontSize: 14,
-    color: "#64748b",
-    marginBottom: 8,
-  },
-  registerLink: {
-    fontSize: 14,
-    color: "#10b981",
-    fontWeight: "600",
   },
 });

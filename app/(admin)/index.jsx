@@ -1,312 +1,237 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   SafeAreaView,
   Alert,
-  ScrollView,
   TouchableOpacity,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "../../contexts/AuthContext";
-import { useSettings } from "../../contexts/SettingsContext";
-import { useTranslation } from "../../hooks/useTranslation";
 import Button from "../../components/ui/Button";
 import { signOutUser } from "../../services/authService";
-import { getColors } from "../../constants/Colors";
 
 function AdminHome() {
   const { currentUser, userProfile } = useAuth();
-  const { theme } = useSettings();
-  const { t } = useTranslation();
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
-  const navigationRef = useRef(false);
-  const colors = getColors(theme);
 
   const handleLogout = async () => {
-    if (loggingOut || navigationRef.current) return;
-
-    setLoggingOut(true);
-    const result = await signOutUser();
-
-    if (result.success) {
-      navigationRef.current = true;
-      router.replace("/(auth)/login");
-    } else {
-      Alert.alert("Logout Failed", "Failed to logout. Please try again.");
-    }
-
-    setLoggingOut(false);
+    Alert.alert("Konfirmasi Logout", "Apakah Anda yakin ingin keluar?", [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Keluar",
+        style: "destructive",
+        onPress: async () => {
+          setLoggingOut(true);
+          const result = await signOutUser();
+          if (result.success) {
+            router.replace("/role-selection");
+          } else {
+            Alert.alert("Gagal Logout", "Gagal keluar. Silakan coba lagi.");
+          }
+          setLoggingOut(false);
+        },
+      },
+    ]);
   };
 
-  const adminFeatures = [
-    {
-      title: t("home.userManagement"),
-      description: t("home.userManagementDesc"),
-      icon: "👥",
-      onPress: () => Alert.alert("Feature", "User Management - Coming Soon!"),
-    },
-    {
-      title: t("home.systemAnalytics"),
-      description: t("home.systemAnalyticsDesc"),
-      icon: "📊",
-      onPress: () => Alert.alert("Feature", "System Analytics - Coming Soon!"),
-    },
-    {
-      title: t("home.systemConfiguration"),
-      description: t("home.systemConfigurationDesc"),
-      icon: "⚙️",
-      onPress: () => Alert.alert("Feature", "System Config - Coming Soon!"),
-    },
-  ];
-
-  const getWelcomeMessage = () => {
-    if (userProfile?.name) {
-      return `${t("home.welcomeAdmin")} ${userProfile.name}!`;
-    }
-    return t("home.welcomeAdmin");
+  const handleTambahSantri = () => {
+    router.push("/(admin)/tambah-santri");
   };
 
-  const styles = createStyles(colors);
+  const handleDaftarSantri = () => {
+    router.push("/(admin)/daftar-santri");
+  };
+
+  const handleCekPembayaran = () => {
+    Alert.alert("Info", "Fitur ini akan segera tersedia");
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          <Text style={styles.title}>{getWelcomeMessage()}</Text>
-
-          {userProfile ? (
-            <View style={styles.profileContainer}>
-              <View style={styles.profileCard}>
-                <Text style={styles.cardTitle}>{t("home.adminProfile")}</Text>
-
-                <View style={styles.profileRow}>
-                  <Text style={styles.label}>{t("common.name")}:</Text>
-                  <Text style={styles.value}>{userProfile.name}</Text>
-                </View>
-
-                <View style={styles.profileRow}>
-                  <Text style={styles.label}>{t("home.role")}:</Text>
-                  <Text style={styles.value}>{t("home.administrator")}</Text>
-                </View>
-
-                <View style={styles.profileRow}>
-                  <Text style={styles.label}>{t("home.accessLevel")}:</Text>
-                  <Text style={styles.value}>{t("home.fullAccess")}</Text>
-                </View>
-              </View>
-
-              <View style={styles.accountCard}>
-                <Text style={styles.cardTitle}>
-                  {t("home.accountInformation")}
-                </Text>
-
-                <View style={styles.profileRow}>
-                  <Text style={styles.label}>{t("common.email")}:</Text>
-                  <Text style={styles.value}>{currentUser?.email}</Text>
-                </View>
-
-                <View style={styles.profileRow}>
-                  <Text style={styles.label}>Admin ID:</Text>
-                  <Text style={styles.value}>{userProfile.id}</Text>
-                </View>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>{t("common.loading")}</Text>
-            </View>
+      <View style={styles.content}>
+        <View style={styles.headerSection}>
+          <Text style={styles.title}>Dashboard Admin</Text>
+          <Text style={styles.subtitle}>TPQ Ibadurrohman</Text>
+          {userProfile && (
+            <Text style={styles.welcomeText}>
+              Selamat datang, {userProfile.nama}
+            </Text>
           )}
-
-          <View style={styles.featuresContainer}>
-            <Text style={styles.sectionTitle}>{t("home.systemOverview")}</Text>
-
-            {adminFeatures.map((feature, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.featureCard}
-                onPress={feature.onPress}
-                activeOpacity={0.7}
-              >
-                <View style={styles.featureIcon}>
-                  <Text style={styles.iconText}>{feature.icon}</Text>
-                </View>
-                <View style={styles.featureContent}>
-                  <Text style={styles.featureTitle}>{feature.title}</Text>
-                  <Text style={styles.featureDescription}>
-                    {feature.description}
-                  </Text>
-                </View>
-                <View style={styles.featureArrow}>
-                  <Text style={styles.arrowText}>→</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.actionsContainer}>
-            <Button
-              title={loggingOut ? "Logging out..." : t("common.logout")}
-              onPress={handleLogout}
-              variant="outline"
-              style={styles.logoutButton}
-              disabled={loggingOut}
-            />
-          </View>
         </View>
-      </ScrollView>
+
+        <View style={styles.menuSection}>
+          <TouchableOpacity
+            style={[styles.menuCard, styles.primaryCard]}
+            onPress={handleTambahSantri}
+            activeOpacity={0.8}
+          >
+            <View style={styles.menuIcon}>
+              <Text style={styles.menuIconText}>👤</Text>
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Tambah Data Santri</Text>
+              <Text style={styles.menuDesc}>
+                Daftarkan santri baru dan buat akun wali santri
+              </Text>
+            </View>
+            <View style={styles.menuArrow}>
+              <Text style={styles.arrowText}>→</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuCard, styles.secondaryCard]}
+            onPress={handleDaftarSantri}
+            activeOpacity={0.8}
+          >
+            <View style={styles.menuIcon}>
+              <Text style={styles.menuIconText}>📋</Text>
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Daftar Santri</Text>
+              <Text style={styles.menuDesc}>
+                Lihat dan kelola data santri yang terdaftar
+              </Text>
+            </View>
+            <View style={styles.menuArrow}>
+              <Text style={styles.arrowText}>→</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuCard, styles.tertiaryCard]}
+            onPress={handleCekPembayaran}
+            activeOpacity={0.8}
+          >
+            <View style={styles.menuIcon}>
+              <Text style={styles.menuIconText}>💰</Text>
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Cek Status Pembayaran</Text>
+              <Text style={styles.menuDesc}>
+                Lihat status pembayaran bisyaroh semua santri
+              </Text>
+            </View>
+            <View style={styles.menuArrow}>
+              <Text style={styles.arrowText}>→</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.logoutSection}>
+          <Button
+            title={loggingOut ? "Sedang Keluar..." : "Keluar"}
+            onPress={handleLogout}
+            variant="outline"
+            disabled={loggingOut}
+            style={styles.logoutButton}
+          />
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
 
-const createStyles = (colors) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    scrollView: {
-      flex: 1,
-    },
-    content: {
-      padding: 24,
-      paddingTop: 60,
-    },
-    title: {
-      fontSize: 28,
-      fontWeight: "bold",
-      color: colors.gray900,
-      marginBottom: 24,
-      textAlign: "center",
-    },
-    profileContainer: {
-      marginBottom: 32,
-    },
-    profileCard: {
-      backgroundColor: colors.white,
-      borderRadius: 12,
-      padding: 20,
-      marginBottom: 16,
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    accountCard: {
-      backgroundColor: colors.white,
-      borderRadius: 12,
-      padding: 20,
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    cardTitle: {
-      fontSize: 18,
-      fontWeight: "600",
-      color: colors.gray900,
-      marginBottom: 16,
-      textAlign: "center",
-    },
-    profileRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      paddingVertical: 8,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.gray100,
-    },
-    label: {
-      fontSize: 14,
-      fontWeight: "500",
-      color: colors.gray600,
-      flex: 1,
-    },
-    value: {
-      fontSize: 14,
-      color: colors.gray900,
-      flex: 2,
-      textAlign: "right",
-    },
-    loadingContainer: {
-      backgroundColor: colors.white,
-      borderRadius: 12,
-      padding: 32,
-      alignItems: "center",
-      marginBottom: 32,
-    },
-    loadingText: {
-      fontSize: 16,
-      color: colors.gray500,
-    },
-    featuresContainer: {
-      marginBottom: 32,
-    },
-    sectionTitle: {
-      fontSize: 20,
-      fontWeight: "600",
-      color: colors.gray900,
-      marginBottom: 16,
-    },
-    featureCard: {
-      backgroundColor: colors.white,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 12,
-      flexDirection: "row",
-      alignItems: "center",
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    featureIcon: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      backgroundColor: colors.primary + "20",
-      alignItems: "center",
-      justifyContent: "center",
-      marginRight: 16,
-    },
-    iconText: {
-      fontSize: 20,
-    },
-    featureContent: {
-      flex: 1,
-    },
-    featureTitle: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: colors.gray900,
-      marginBottom: 4,
-    },
-    featureDescription: {
-      fontSize: 14,
-      color: colors.gray600,
-      lineHeight: 20,
-    },
-    featureArrow: {
-      marginLeft: 12,
-    },
-    arrowText: {
-      fontSize: 18,
-      color: colors.gray400,
-    },
-    actionsContainer: {
-      gap: 12,
-    },
-    logoutButton: {
-      marginBottom: 8,
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 24,
+  },
+  headerSection: {
+    alignItems: "center",
+    marginBottom: 40,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#64748b",
+    marginBottom: 12,
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: "#3b82f6",
+    fontWeight: "500",
+  },
+  menuSection: {
+    flex: 1,
+    justifyContent: "center",
+    gap: 16,
+  },
+  menuCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 2,
+  },
+  primaryCard: {
+    borderColor: "#3b82f6",
+  },
+  secondaryCard: {
+    borderColor: "#10b981",
+  },
+  tertiaryCard: {
+    borderColor: "#f59e0b",
+  },
+  menuIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  menuIconText: {
+    fontSize: 24,
+  },
+  menuContent: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  menuDesc: {
+    fontSize: 14,
+    color: "#64748b",
+    lineHeight: 20,
+  },
+  menuArrow: {
+    marginLeft: 12,
+  },
+  arrowText: {
+    fontSize: 20,
+    color: "#94a3b8",
+  },
+  logoutSection: {
+    marginTop: 20,
+  },
+  logoutButton: {
+    borderColor: "#ef4444",
+  },
+});
 
 export default AdminHome;

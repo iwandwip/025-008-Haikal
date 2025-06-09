@@ -1,4 +1,13 @@
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  collection, 
+  getDocs, 
+  query, 
+  where 
+} from 'firebase/firestore';
 import { db } from './firebase';
 
 export const createUserProfile = async (uid, profileData) => {
@@ -19,14 +28,18 @@ export const createUserProfile = async (uid, profileData) => {
     const userProfile = {
       id: uid,
       email: profileData.email,
-      nama: profileData.nama,
-      noHp: profileData.noHp,
       role: profileData.role,
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
-    if (profileData.role === 'user') {
+    if (profileData.role === 'admin') {
+      userProfile.nama = profileData.nama;
+      userProfile.noHp = profileData.noHp;
+    } else if (profileData.role === 'user') {
+      userProfile.namaSantri = profileData.namaSantri;
+      userProfile.namaWali = profileData.namaWali;
+      userProfile.noHpWali = profileData.noHpWali;
       userProfile.rfidSantri = profileData.rfidSantri || "";
     }
 
@@ -82,6 +95,54 @@ export const updateUserProfile = async (uid, updates) => {
     return { success: true };
   } catch (error) {
     console.error('Error update profil user:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getAllSantri = async () => {
+  try {
+    if (!db) {
+      console.warn('Firestore belum diinisialisasi, return empty array');
+      return { success: true, data: [] };
+    }
+
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('role', '==', 'user'));
+    const querySnapshot = await getDocs(q);
+    
+    const santriList = [];
+    querySnapshot.forEach((doc) => {
+      santriList.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    santriList.sort((a, b) => a.namaSantri.localeCompare(b.namaSantri));
+
+    return { success: true, data: santriList };
+  } catch (error) {
+    console.error('Error mengambil data santri:', error);
+    return { success: false, error: error.message, data: [] };
+  }
+};
+
+export const updateSantriRFID = async (santriId, rfidCode) => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const santriRef = doc(db, 'users', santriId);
+    await updateDoc(santriRef, {
+      rfidSantri: rfidCode,
+      updatedAt: new Date()
+    });
+
+    console.log('RFID santri berhasil diupdate');
+    return { success: true };
+  } catch (error) {
+    console.error('Error update RFID santri:', error);
     return { success: false, error: error.message };
   }
 };

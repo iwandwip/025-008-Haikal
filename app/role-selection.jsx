@@ -5,11 +5,9 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  Image,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Colors } from "../constants/Colors";
 
 export default function RoleSelection() {
   const router = useRouter();
@@ -127,7 +125,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: Colors.primary,
+    backgroundColor: "#F50057",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000",
