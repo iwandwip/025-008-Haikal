@@ -3,8 +3,7 @@ import {
   setDoc, 
   getDoc, 
   onSnapshot, 
-  updateDoc, 
-  deleteDoc 
+  updateDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -51,7 +50,17 @@ export const cancelPairing = async () => {
       throw new Error('Firestore belum diinisialisasi');
     }
 
-    await deleteDoc(doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID));
+    const docRef = doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      await updateDoc(docRef, {
+        isActive: false,
+        status: 'cancelled',
+        cancelledTime: new Date()
+      });
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error canceling pairing:', error);
@@ -69,7 +78,10 @@ export const getPairingStatus = async () => {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      return docSnap.data();
+      const data = docSnap.data();
+      if (data.isActive) {
+        return data;
+      }
     }
     return null;
   } catch (error) {
@@ -90,7 +102,7 @@ export const listenToPairingData = (callback) => {
     const unsubscribe = onSnapshot(docRef, (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        if (data.rfidCode && data.status === 'received') {
+        if (data.rfidCode && data.status === 'received' && data.isActive) {
           callback(data.rfidCode);
         }
       }
@@ -110,13 +122,18 @@ export const updateRFIDCode = async (rfidCode) => {
     }
 
     const docRef = doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID);
-    await updateDoc(docRef, {
-      rfidCode: rfidCode,
-      status: 'received',
-      receivedTime: new Date()
-    });
+    const docSnap = await getDoc(docRef);
 
-    return { success: true };
+    if (docSnap.exists() && docSnap.data().isActive) {
+      await updateDoc(docRef, {
+        rfidCode: rfidCode,
+        status: 'received',
+        receivedTime: new Date()
+      });
+      return { success: true };
+    }
+
+    return { success: false, error: 'Tidak ada session pairing yang aktif' };
   } catch (error) {
     console.error('Error updating RFID code:', error);
     return { success: false, error: error.message };

@@ -8,7 +8,7 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Button from "../../components/ui/Button";
 import LoadingSpinner from "../../components/ui/LoadingSpinner";
@@ -50,10 +50,14 @@ export default function DetailSantri() {
     setPairingStatus(status);
   };
 
-  useEffect(() => {
-    loadSantriData();
-    loadPairingStatus();
+  useFocusEffect(
+    React.useCallback(() => {
+      loadSantriData();
+      loadPairingStatus();
+    }, [santriId])
+  );
 
+  useEffect(() => {
     const unsubscribe = listenToPairingData((rfidData) => {
       if (
         rfidData &&
@@ -65,7 +69,7 @@ export default function DetailSantri() {
     });
 
     return () => unsubscribe && unsubscribe();
-  }, [santriId]);
+  }, [santriId, pairingStatus]);
 
   useEffect(() => {
     const interval = setInterval(loadPairingStatus, 2000);
@@ -159,7 +163,12 @@ export default function DetailSantri() {
             const result = await deleteSantri(santriId);
             if (result.success) {
               Alert.alert("Berhasil", "Data santri berhasil dihapus", [
-                { text: "OK", onPress: () => router.back() },
+                {
+                  text: "OK",
+                  onPress: () => {
+                    router.back();
+                  },
+                },
               ]);
             } else {
               Alert.alert("Error", result.error);
