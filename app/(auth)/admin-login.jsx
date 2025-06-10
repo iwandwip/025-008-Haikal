@@ -34,7 +34,7 @@ export default function AdminLogin() {
     if (result.success) {
       router.replace("/(admin)");
     } else {
-      Alert.alert("Login Gagal", result.error);
+      Alert.alert("Masuk Gagal", result.error);
     }
     setLoading(false);
   };
@@ -56,7 +56,7 @@ export default function AdminLogin() {
 
         <View style={styles.content}>
           <View style={styles.titleSection}>
-            <Text style={styles.title}>Login Admin</Text>
+            <Text style={styles.title}>Masuk Admin</Text>
             <Text style={styles.subtitle}>
               Masuk sebagai Administrator TPQ Ibadurrohman
             </Text>

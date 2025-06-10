@@ -29,12 +29,12 @@ export const signInWithEmail = async (email, password) => {
       throw new Error('Firebase Auth belum diinisialisasi.');
     }
     
-    console.log('Mencoba login dengan email:', email);
+    console.log('Mencoba masuk dengan email:', email);
     const result = await signInWithEmailAndPassword(auth, email, password);
-    console.log('Login berhasil');
+    console.log('Masuk berhasil');
     return { success: true, user: result.user };
   } catch (error) {
-    console.error('Error login:', error);
+    console.error('Error masuk:', error);
     return { success: false, error: handleAuthError(error) };
   }
 };
@@ -79,10 +79,10 @@ export const signOutUser = async () => {
       throw new Error('Firebase Auth belum diinisialisasi');
     }
     await signOut(auth);
-    console.log('Logout berhasil');
+    console.log('Keluar berhasil');
     return { success: true };
   } catch (error) {
-    console.error('Error logout:', error);
+    console.error('Error keluar:', error);
     return { success: false, error: handleAuthError(error) };
   }
 };

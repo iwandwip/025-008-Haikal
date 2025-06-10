@@ -26,47 +26,64 @@ function StatusPembayaran() {
   const [payments, setPayments] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [renderingData, setRenderingData] = useState(false);
   const [loadingText, setLoadingText] = useState("Memuat data pembayaran...");
 
-  const loadData = async () => {
+  const loadData = async (isRefresh = false) => {
     try {
       if (!userProfile?.id) {
         setPayments([]);
         setSummary(null);
         setTimeline(null);
         setLoading(false);
+        setRenderingData(false);
         return;
       }
 
-      setLoadingText("Mengambil timeline aktif...");
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (!isRefresh) {
+        setLoadingText("Mengambil timeline aktif...");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
 
       setLoadingText("Memuat data pembayaran...");
       const result = await getWaliPaymentHistory(userProfile.id);
 
       if (result.success) {
-        setLoadingText("Menyiapkan data...");
-        await new Promise((resolve) => setTimeout(resolve, 300));
+        if (!isRefresh) {
+          setLoadingText("Menyiapkan data...");
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+
+        setRenderingData(true);
+        setLoading(false);
+
+        await new Promise((resolve) => setTimeout(resolve, 800));
 
         setPayments(result.payments);
         setTimeline(result.timeline);
         setSummary(getPaymentSummary(result.payments));
 
-        setLoadingText("Menyelesaikan...");
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        if (!isRefresh) {
+          setLoadingText("Menyelesaikan...");
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+
+        setRenderingData(false);
       } else {
         setPayments([]);
         setSummary(null);
         setTimeline(null);
+        setLoading(false);
+        setRenderingData(false);
       }
     } catch (error) {
       console.error("Error loading payment data:", error);
       setPayments([]);
       setSummary(null);
       setTimeline(null);
+      setLoading(false);
+      setRenderingData(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -75,7 +92,7 @@ function StatusPembayaran() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData();
+    await loadData(true);
     setRefreshing(false);
   };
 
@@ -169,6 +186,44 @@ function StatusPembayaran() {
                   { backgroundColor: colors.primary },
                 ]}
               />
+            </View>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+
+  const renderDataLoadingScreen = () => (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
+        {userProfile && (
+          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
+        )}
+        {timeline && (
+          <Text style={styles.timelineInfo}>Timeline: {timeline.name}</Text>
+        )}
+      </View>
+
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingCard}>
+          <ActivityIndicator
+            size="large"
+            color={colors.primary}
+            style={styles.loadingSpinner}
+          />
+          <Text style={[styles.loadingMainText, { color: colors.gray900 }]}>
+            Menyiapkan Data Pembayaran
+          </Text>
+          <Text style={[styles.loadingSubText, { color: colors.gray600 }]}>
+            Sedang memproses data pembayaran...
+          </Text>
+
+          <View style={styles.renderingProgress}>
+            <View style={styles.dotsContainer}>
+              <View style={[styles.dot, styles.dot1]} />
+              <View style={[styles.dot, styles.dot2]} />
+              <View style={[styles.dot, styles.dot3]} />
             </View>
           </View>
         </View>
@@ -388,6 +443,10 @@ function StatusPembayaran() {
     return renderLoadingScreen();
   }
 
+  if (renderingData) {
+    return renderDataLoadingScreen();
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -522,6 +581,41 @@ const createStyles = (colors) =>
     loadingProgress: {
       width: "100%",
     },
+    progressBar: {
+      height: 8,
+      borderRadius: 4,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 4,
+      width: "70%",
+    },
+    renderingProgress: {
+      marginTop: 10,
+      alignItems: "center",
+    },
+    dotsContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.primary,
+      marginHorizontal: 4,
+    },
+    dot1: {
+      opacity: 1,
+    },
+    dot2: {
+      opacity: 0.7,
+    },
+    dot3: {
+      opacity: 0.4,
+    },
     listContent: {
       padding: 24,
     },
@@ -558,16 +652,6 @@ const createStyles = (colors) =>
     progressPercentage: {
       fontSize: 16,
       fontWeight: "700",
-    },
-    progressBar: {
-      height: 8,
-      borderRadius: 4,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: 4,
-      transition: "width 0.3s ease",
     },
     summaryStats: {
       marginBottom: 16,

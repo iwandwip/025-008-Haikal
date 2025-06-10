@@ -11,7 +11,7 @@ import { Colors } from "../../constants/Colors";
 const LoadingSpinner = ({
   size = "large",
   color = Colors.primary,
-  text = "Loading...",
+  text = "Memuat...",
   subText = null,
   style,
   showProgress = false,

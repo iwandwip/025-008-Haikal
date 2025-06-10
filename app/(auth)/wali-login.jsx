@@ -34,7 +34,7 @@ export default function WaliLogin() {
     if (result.success) {
       router.replace("/(tabs)");
     } else {
-      Alert.alert("Login Gagal", result.error);
+      Alert.alert("Masuk Gagal", result.error);
     }
     setLoading(false);
   };
