@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Modal,
   ScrollView,
-  Platform,
 } from "react-native";
 import { Colors } from "../../constants/Colors";
 
@@ -144,10 +143,76 @@ const TimelinePicker = ({
     return isSameDay(date1, date2) && date1.getHours() === date2.getHours();
   };
 
+  const getAllValidDateTime = () => {
+    if (!minDate || !maxDate) return null;
+
+    const min = new Date(minDate);
+    const max = new Date(maxDate);
+    const validTimes = [];
+
+    let current = new Date(min);
+    while (current <= max) {
+      validTimes.push(new Date(current));
+
+      switch (timelineType) {
+        case "minute":
+          current.setMinutes(current.getMinutes() + 1);
+          break;
+        case "hourly":
+          current.setHours(current.getHours() + 1);
+          break;
+        default:
+          current.setDate(current.getDate() + 1);
+          break;
+      }
+    }
+
+    return validTimes;
+  };
+
   const getValidRange = (level) => {
     const min = minDate ? new Date(minDate) : null;
     const max = maxDate ? new Date(maxDate) : null;
     const current = new Date(selectedDate);
+
+    if ((level === "hour" || level === "minute") && min && max) {
+      const validTimes = getAllValidDateTime();
+      if (!validTimes) return { min: 0, max: 0 };
+
+      const currentDateValidTimes = validTimes.filter((time) =>
+        isSameDay(time, current)
+      );
+
+      if (level === "hour") {
+        const validHours = [
+          ...new Set(currentDateValidTimes.map((time) => time.getHours())),
+        ];
+        return {
+          min: Math.min(...validHours),
+          max: Math.max(...validHours),
+          validValues: validHours.sort((a, b) => a - b),
+        };
+      }
+
+      if (level === "minute") {
+        const currentHourValidTimes = currentDateValidTimes.filter(
+          (time) => time.getHours() === current.getHours()
+        );
+        const validMinutes = [
+          ...new Set(currentHourValidTimes.map((time) => time.getMinutes())),
+        ];
+
+        if (validMinutes.length === 0) {
+          return { min: 0, max: 59, validValues: [] };
+        }
+
+        return {
+          min: Math.min(...validMinutes),
+          max: Math.max(...validMinutes),
+          validValues: validMinutes.sort((a, b) => a - b),
+        };
+      }
+    }
 
     switch (level) {
       case "year":
@@ -197,32 +262,6 @@ const TimelinePicker = ({
 
         return { min: minDay, max: maxDay };
 
-      case "hour":
-        let minHour = 0;
-        let maxHour = 23;
-
-        if (min && isSameDay(min, current)) {
-          minHour = min.getHours();
-        }
-        if (max && isSameDay(max, current)) {
-          maxHour = max.getHours();
-        }
-
-        return { min: minHour, max: maxHour };
-
-      case "minute":
-        let minMinute = 0;
-        let maxMinute = 59;
-
-        if (min && isSameHour(min, current)) {
-          minMinute = min.getMinutes();
-        }
-        if (max && isSameHour(max, current)) {
-          maxMinute = max.getMinutes();
-        }
-
-        return { min: minMinute, max: maxMinute };
-
       case "week":
         const weeksInMonth = getWeeksInMonth(
           current.getFullYear(),
@@ -239,25 +278,48 @@ const TimelinePicker = ({
     const range = getValidRange(level);
     const options = [];
 
-    for (let i = range.min; i <= range.max; i++) {
-      let label = i.toString();
+    if (range.validValues) {
+      range.validValues.forEach((value) => {
+        let label = value.toString();
 
-      switch (level) {
-        case "month":
-          label = getMonthName(i);
-          break;
-        case "week":
-          label = `Minggu ${i}`;
-          break;
-        case "hour":
-          label = `${i.toString().padStart(2, "0")}:00`;
-          break;
-        case "minute":
-          label = i.toString().padStart(2, "0");
-          break;
+        switch (level) {
+          case "month":
+            label = getMonthName(value);
+            break;
+          case "week":
+            label = `Minggu ${value}`;
+            break;
+          case "hour":
+            label = `${value.toString().padStart(2, "0")}:00`;
+            break;
+          case "minute":
+            label = value.toString().padStart(2, "0");
+            break;
+        }
+
+        options.push({ value, label });
+      });
+    } else {
+      for (let i = range.min; i <= range.max; i++) {
+        let label = i.toString();
+
+        switch (level) {
+          case "month":
+            label = getMonthName(i);
+            break;
+          case "week":
+            label = `Minggu ${i}`;
+            break;
+          case "hour":
+            label = `${i.toString().padStart(2, "0")}:00`;
+            break;
+          case "minute":
+            label = i.toString().padStart(2, "0");
+            break;
+        }
+
+        options.push({ value: i, label });
       }
-
-      options.push({ value: i, label });
     }
 
     return options;
@@ -280,6 +342,15 @@ const TimelinePicker = ({
       default:
         return 0;
     }
+  };
+
+  const isValidDateTime = (testDate) => {
+    if (!minDate || !maxDate) return true;
+
+    const min = new Date(minDate);
+    const max = new Date(maxDate);
+
+    return testDate >= min && testDate <= max;
   };
 
   const setValue = (level, value) => {
@@ -326,17 +397,8 @@ const TimelinePicker = ({
         break;
     }
 
-    if (updated) {
-      const min = minDate ? new Date(minDate) : null;
-      const max = maxDate ? new Date(maxDate) : null;
-
-      let isValid = true;
-      if (min && newDate < min) isValid = false;
-      if (max && newDate > max) isValid = false;
-
-      if (isValid) {
-        setSelectedDate(newDate);
-      }
+    if (updated && isValidDateTime(newDate)) {
+      setSelectedDate(newDate);
     }
   };
 
