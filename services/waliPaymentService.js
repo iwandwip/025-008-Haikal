@@ -1,0 +1,96 @@
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  where 
+} from 'firebase/firestore';
+import { db } from './firebase';
+import { getActiveTimeline } from './timelineService';
+
+export const getWaliPaymentHistory = async (santriId) => {
+  try {
+    if (!db) {
+      return { success: true, payments: [] };
+    }
+
+    if (!santriId) {
+      return { success: false, error: 'Santri ID tidak ditemukan', payments: [] };
+    }
+
+    const timelineResult = await getActiveTimeline();
+    if (!timelineResult.success) {
+      return { success: false, error: 'Timeline aktif tidak ditemukan', payments: [] };
+    }
+
+    const timeline = timelineResult.timeline;
+    const allPayments = [];
+
+    for (const periodKey of Object.keys(timeline.periods)) {
+      const period = timeline.periods[periodKey];
+      if (period.active) {
+        try {
+          const paymentsRef = collection(
+            db, 
+            'payments', 
+            timeline.id, 
+            'periods', 
+            periodKey, 
+            'santri_payments'
+          );
+          
+          const q = query(paymentsRef, where('santriId', '==', santriId));
+          const querySnapshot = await getDocs(q);
+          
+          querySnapshot.forEach((doc) => {
+            const paymentData = doc.data();
+            allPayments.push({
+              id: doc.id,
+              ...paymentData,
+              periodData: period,
+              periodKey: periodKey
+            });
+          });
+        } catch (periodError) {
+          console.warn(`Error loading period ${periodKey}:`, periodError);
+        }
+      }
+    }
+
+    allPayments.sort((a, b) => {
+      const periodA = parseInt(a.periodKey.replace('period_', ''));
+      const periodB = parseInt(b.periodKey.replace('period_', ''));
+      return periodA - periodB;
+    });
+
+    return { success: true, payments: allPayments, timeline };
+  } catch (error) {
+    console.error('Error getting wali payment history:', error);
+    return { success: false, error: error.message, payments: [] };
+  }
+};
+
+export const getPaymentSummary = (payments) => {
+  const total = payments.length;
+  const lunas = payments.filter(p => p.status === 'lunas').length;
+  const belumBayar = payments.filter(p => p.status === 'belum_bayar').length;
+  const terlambat = payments.filter(p => p.status === 'terlambat').length;
+  
+  const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const paidAmount = payments
+    .filter(p => p.status === 'lunas')
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+  const unpaidAmount = totalAmount - paidAmount;
+
+  const progressPercentage = total > 0 ? Math.round((lunas / total) * 100) : 0;
+
+  return {
+    total,
+    lunas,
+    belumBayar,
+    terlambat,
+    totalAmount,
+    paidAmount,
+    unpaidAmount,
+    progressPercentage
+  };
+};

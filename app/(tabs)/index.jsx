@@ -12,9 +12,9 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
 import {
-  getActiveTimeline,
-  getPaymentsByPeriod,
-} from "../../services/timelineService";
+  getWaliPaymentHistory,
+  getPaymentSummary,
+} from "../../services/waliPaymentService";
 
 function StatusPembayaran() {
   const { userProfile } = useAuth();
@@ -23,50 +23,35 @@ function StatusPembayaran() {
   const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState(null);
   const [payments, setPayments] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     try {
-      const timelineResult = await getActiveTimeline();
-      if (timelineResult.success) {
-        setTimeline(timelineResult.timeline);
+      if (!userProfile?.id) {
+        setPayments([]);
+        setSummary(null);
+        setTimeline(null);
+        setLoading(false);
+        return;
+      }
 
-        if (userProfile?.id) {
-          const allPayments = [];
+      const result = await getWaliPaymentHistory(userProfile.id);
 
-          for (const periodKey of Object.keys(
-            timelineResult.timeline.periods
-          )) {
-            const period = timelineResult.timeline.periods[periodKey];
-            if (period.active) {
-              const paymentResult = await getPaymentsByPeriod(
-                timelineResult.timeline.id,
-                periodKey
-              );
-
-              if (paymentResult.success) {
-                const userPayment = paymentResult.payments.find(
-                  (p) => p.santriId === userProfile.id
-                );
-
-                if (userPayment) {
-                  allPayments.push({
-                    ...userPayment,
-                    periodData: period,
-                  });
-                }
-              }
-            }
-          }
-
-          setPayments(allPayments);
-        }
+      if (result.success) {
+        setPayments(result.payments);
+        setTimeline(result.timeline);
+        setSummary(getPaymentSummary(result.payments));
       } else {
         setPayments([]);
+        setSummary(null);
+        setTimeline(null);
       }
     } catch (error) {
       console.error("Error loading payment data:", error);
       setPayments([]);
+      setSummary(null);
+      setTimeline(null);
     }
 
     setLoading(false);
@@ -108,6 +93,19 @@ function StatusPembayaran() {
     }
   };
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case "lunas":
+        return "✅";
+      case "belum_bayar":
+        return "❌";
+      case "terlambat":
+        return "⚠️";
+      default:
+        return "❓";
+    }
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -121,9 +119,115 @@ function StatusPembayaran() {
     const date = new Date(dateString);
     return date.toLocaleDateString("id-ID", {
       day: "numeric",
-      month: "long",
+      month: "short",
       year: "numeric",
     });
+  };
+
+  const renderSummaryCard = () => {
+    if (!summary) return null;
+
+    return (
+      <View
+        style={[
+          styles.summaryCard,
+          { backgroundColor: colors.white, borderColor: colors.gray200 },
+        ]}
+      >
+        <Text style={[styles.summaryTitle, { color: colors.gray900 }]}>
+          Ringkasan Pembayaran
+        </Text>
+
+        <View style={styles.progressContainer}>
+          <View style={styles.progressHeader}>
+            <Text style={[styles.progressText, { color: colors.gray700 }]}>
+              Progress: {summary.lunas}/{summary.total} periode
+            </Text>
+            <Text
+              style={[styles.progressPercentage, { color: colors.primary }]}
+            >
+              {summary.progressPercentage}%
+            </Text>
+          </View>
+
+          <View
+            style={[styles.progressBar, { backgroundColor: colors.gray200 }]}
+          >
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: colors.success,
+                  width: `${summary.progressPercentage}%`,
+                },
+              ]}
+            />
+          </View>
+        </View>
+
+        <View style={styles.summaryStats}>
+          <View style={styles.statRow}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.success }]}>
+                {summary.lunas}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.gray600 }]}>
+                Lunas
+              </Text>
+            </View>
+
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, { color: colors.error }]}>
+                {summary.belumBayar}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.gray600 }]}>
+                Belum Bayar
+              </Text>
+            </View>
+
+            {summary.terlambat > 0 && (
+              <View style={styles.statItem}>
+                <Text style={[styles.statNumber, { color: colors.warning }]}>
+                  {summary.terlambat}
+                </Text>
+                <Text style={[styles.statLabel, { color: colors.gray600 }]}>
+                  Terlambat
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.amountSummary}>
+            <View style={styles.amountRow}>
+              <Text style={[styles.amountLabel, { color: colors.gray600 }]}>
+                Total Tagihan:
+              </Text>
+              <Text style={[styles.amountValue, { color: colors.gray900 }]}>
+                {formatCurrency(summary.totalAmount)}
+              </Text>
+            </View>
+
+            <View style={styles.amountRow}>
+              <Text style={[styles.amountLabel, { color: colors.gray600 }]}>
+                Sudah Dibayar:
+              </Text>
+              <Text style={[styles.amountValue, { color: colors.success }]}>
+                {formatCurrency(summary.paidAmount)}
+              </Text>
+            </View>
+
+            <View style={styles.amountRow}>
+              <Text style={[styles.amountLabel, { color: colors.gray600 }]}>
+                Belum Dibayar:
+              </Text>
+              <Text style={[styles.amountValue, { color: colors.error }]}>
+                {formatCurrency(summary.unpaidAmount)}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   const renderPaymentItem = ({ item }) => (
@@ -134,15 +238,22 @@ function StatusPembayaran() {
       ]}
     >
       <View style={styles.cardHeader}>
-        <Text style={[styles.monthText, { color: colors.gray900 }]}>
-          {item.periodData.label}
-        </Text>
+        <View style={styles.periodInfo}>
+          <Text style={[styles.periodText, { color: colors.gray900 }]}>
+            {item.periodData.label}
+          </Text>
+          <Text style={[styles.periodNumber, { color: colors.gray500 }]}>
+            Periode {item.periodData.number}
+          </Text>
+        </View>
+
         <View
           style={[
             styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) + "20" },
+            { backgroundColor: getStatusColor(item.status) + "15" },
           ]}
         >
+          <Text style={styles.statusIcon}>{getStatusIcon(item.status)}</Text>
           <Text
             style={[styles.statusText, { color: getStatusColor(item.status) }]}
           >
@@ -182,6 +293,17 @@ function StatusPembayaran() {
             </Text>
           </View>
         )}
+
+        {item.notes && (
+          <View style={styles.infoRow}>
+            <Text style={[styles.labelText, { color: colors.gray600 }]}>
+              Catatan:
+            </Text>
+            <Text style={[styles.valueText, { color: colors.gray700 }]}>
+              {item.notes}
+            </Text>
+          </View>
+        )}
       </View>
 
       {item.status === "belum_bayar" && (
@@ -190,7 +312,18 @@ function StatusPembayaran() {
           onPress={() => {}}
         >
           <Text style={[styles.payButtonText, { color: colors.white }]}>
-            Bayar Sekarang
+            💳 Bayar Sekarang
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {item.status === "terlambat" && (
+        <TouchableOpacity
+          style={[styles.payButton, { backgroundColor: colors.warning }]}
+          onPress={() => {}}
+        >
+          <Text style={[styles.payButtonText, { color: colors.white }]}>
+            ⚡ Bayar Segera
           </Text>
         </TouchableOpacity>
       )}
@@ -233,9 +366,16 @@ function StatusPembayaran() {
 
       {payments.length > 0 ? (
         <FlatList
-          data={payments}
-          renderItem={renderPaymentItem}
-          keyExtractor={(item) => item.id}
+          data={[{ type: "summary" }, ...payments]}
+          renderItem={({ item, index }) => {
+            if (item.type === "summary") {
+              return renderSummaryCard();
+            }
+            return renderPaymentItem({ item });
+          }}
+          keyExtractor={(item, index) =>
+            item.type === "summary" ? "summary" : item.id
+          }
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -308,6 +448,88 @@ const createStyles = (colors) =>
     listContent: {
       padding: 24,
     },
+    summaryCard: {
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 24,
+      borderWidth: 1,
+      shadowColor: colors.shadow.color,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+    summaryTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      textAlign: "center",
+      marginBottom: 20,
+    },
+    progressContainer: {
+      marginBottom: 20,
+    },
+    progressHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    progressText: {
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    progressPercentage: {
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    progressBar: {
+      height: 8,
+      borderRadius: 4,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 4,
+    },
+    summaryStats: {
+      marginBottom: 16,
+    },
+    statRow: {
+      flexDirection: "row",
+      justifyContent: "space-around",
+      marginBottom: 20,
+    },
+    statItem: {
+      alignItems: "center",
+    },
+    statNumber: {
+      fontSize: 24,
+      fontWeight: "bold",
+      marginBottom: 4,
+    },
+    statLabel: {
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    amountSummary: {
+      borderTopWidth: 1,
+      borderTopColor: colors.gray200,
+      paddingTop: 16,
+    },
+    amountRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    amountLabel: {
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    amountValue: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
     paymentCard: {
       borderRadius: 12,
       padding: 16,
@@ -322,17 +544,31 @@ const createStyles = (colors) =>
     cardHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
-      alignItems: "center",
+      alignItems: "flex-start",
       marginBottom: 12,
     },
-    monthText: {
+    periodInfo: {
+      flex: 1,
+    },
+    periodText: {
       fontSize: 16,
       fontWeight: "600",
+      marginBottom: 2,
+    },
+    periodNumber: {
+      fontSize: 12,
+      fontWeight: "500",
     },
     statusBadge: {
+      flexDirection: "row",
+      alignItems: "center",
       paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: 16,
+      paddingVertical: 6,
+      borderRadius: 20,
+      gap: 6,
+    },
+    statusIcon: {
+      fontSize: 14,
     },
     statusText: {
       fontSize: 12,
@@ -350,15 +586,21 @@ const createStyles = (colors) =>
     labelText: {
       fontSize: 14,
       fontWeight: "500",
+      flex: 1,
     },
     valueText: {
       fontSize: 14,
       fontWeight: "600",
+      flex: 1.5,
+      textAlign: "right",
     },
     payButton: {
       paddingVertical: 12,
       borderRadius: 8,
       alignItems: "center",
+      flexDirection: "row",
+      justifyContent: "center",
+      gap: 8,
     },
     payButtonText: {
       fontSize: 14,
