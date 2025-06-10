@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import DatePicker from "../../components/ui/DatePicker";
+import TimelinePicker from "../../components/ui/TimelinePicker";
 import {
   createTimelineTemplate,
   createActiveTimeline,
@@ -33,7 +34,7 @@ export default function CreateTimeline() {
     totalAmount: 480000,
     startDate: new Date().toISOString().split("T")[0],
     mode: "realtime",
-    simulationDate: new Date().toISOString().split("T")[0],
+    simulationDate: new Date().toISOString(),
     holidays: [],
     saveAsTemplate: false,
   });
@@ -269,6 +270,49 @@ export default function CreateTimeline() {
     }).format(amount);
   };
 
+  const formatSimulationDisplay = () => {
+    if (!formData.simulationDate) return "Tidak diset";
+
+    const date = new Date(formData.simulationDate);
+    const type = formData.type;
+
+    switch (type) {
+      case "yearly":
+        return date.getFullYear().toString();
+      case "monthly":
+        return date.toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        });
+      case "weekly":
+        const weekNum = Math.ceil(date.getDate() / 7);
+        return `Minggu ${weekNum}, ${date.toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        })}`;
+      case "daily":
+        return date.toLocaleDateString("id-ID");
+      case "hourly":
+        return date.toLocaleString("id-ID", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      case "minute":
+        return date.toLocaleString("id-ID", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      default:
+        return date.toLocaleString("id-ID");
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
@@ -442,18 +486,34 @@ export default function CreateTimeline() {
               </View>
 
               {formData.mode === "manual" && (
-                <DatePicker
-                  label="Simulasi Tanggal Sekarang"
-                  value={formData.simulationDate}
-                  onChange={(value) => updateFormData("simulationDate", value)}
-                />
+                <View style={styles.manualModeSection}>
+                  <TimelinePicker
+                    label={`Simulasi Waktu Sekarang (${
+                      getSelectedType()?.label
+                    })`}
+                    value={formData.simulationDate}
+                    onChange={(value) =>
+                      updateFormData("simulationDate", value)
+                    }
+                    timelineType={formData.type}
+                  />
+
+                  <View style={styles.simulationPreview}>
+                    <Text style={styles.simulationPreviewLabel}>
+                      Waktu Simulasi yang Dipilih:
+                    </Text>
+                    <Text style={styles.simulationPreviewValue}>
+                      {formatSimulationDisplay()}
+                    </Text>
+                  </View>
+                </View>
               )}
 
               <View style={styles.infoBox}>
                 <Text style={styles.infoText}>
                   {formData.mode === "realtime"
                     ? "ℹ️ Mode real-time akan menggunakan tanggal sekarang untuk menghitung status terlambat"
-                    : "ℹ️ Mode manual memungkinkan Anda mengatur tanggal simulasi untuk testing dan demo"}
+                    : `ℹ️ Mode manual memungkinkan Anda mengatur waktu simulasi dengan presisi ${getSelectedType()?.label.toLowerCase()} untuk testing dan demo`}
                 </Text>
               </View>
             </View>
@@ -520,11 +580,9 @@ export default function CreateTimeline() {
 
                 {formData.mode === "manual" && (
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Simulasi Date:</Text>
+                    <Text style={styles.summaryLabel}>Simulasi Waktu:</Text>
                     <Text style={styles.summaryValue}>
-                      {new Date(formData.simulationDate).toLocaleDateString(
-                        "id-ID"
-                      )}
+                      {formatSimulationDisplay()}
                     </Text>
                   </View>
                 )}
@@ -739,6 +797,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#0369a1",
     fontWeight: "500",
+  },
+  manualModeSection: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "#f0f9ff",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+  },
+  simulationPreview: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: "#dbeafe",
+    borderRadius: 8,
+  },
+  simulationPreviewLabel: {
+    fontSize: 12,
+    color: "#1e40af",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  simulationPreviewValue: {
+    fontSize: 14,
+    color: "#1e40af",
+    fontWeight: "600",
   },
   infoBox: {
     backgroundColor: "#dbeafe",

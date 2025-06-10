@@ -11,7 +11,7 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Button from "../../components/ui/Button";
-import DatePicker from "../../components/ui/DatePicker";
+import TimelinePicker from "../../components/ui/TimelinePicker";
 import LoadingSpinner from "../../components/ui/LoadingSpinner";
 import {
   getActiveTimeline,
@@ -29,8 +29,8 @@ export default function TimelineManager() {
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [simulationDate, setSimulationDate] = useState(
-    new Date().toISOString().split("T")[0]
+  const [simulationDateTime, setSimulationDateTime] = useState(
+    new Date().toISOString()
   );
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -46,7 +46,9 @@ export default function TimelineManager() {
     if (timelineResult.success) {
       setActiveTimeline(timelineResult.timeline);
       if (timelineResult.timeline.simulationDate) {
-        setSimulationDate(timelineResult.timeline.simulationDate);
+        setSimulationDateTime(
+          new Date(timelineResult.timeline.simulationDate).toISOString()
+        );
       }
     } else {
       setActiveTimeline(null);
@@ -76,15 +78,19 @@ export default function TimelineManager() {
     }
   };
 
-  const handleUpdateSimulationDate = async () => {
+  const handleUpdateSimulationDateTime = async () => {
     if (!activeTimeline || activeTimeline.mode !== "manual") return;
 
     setUpdating(true);
+
+    const simulationDate = new Date(simulationDateTime)
+      .toISOString()
+      .split("T")[0];
     const result = await updateTimelineSimulationDate(simulationDate);
 
     if (result.success) {
       await loadData();
-      Alert.alert("Berhasil", "Tanggal simulasi berhasil diperbarui!");
+      Alert.alert("Berhasil", "Waktu simulasi berhasil diperbarui!");
     } else {
       Alert.alert("Error", result.error);
     }
@@ -236,6 +242,49 @@ export default function TimelineManager() {
     }
   };
 
+  const formatSimulationDateTime = (dateTimeString) => {
+    if (!dateTimeString) return "Tidak diset";
+
+    const date = new Date(dateTimeString);
+    const type = activeTimeline?.type;
+
+    switch (type) {
+      case "yearly":
+        return date.getFullYear().toString();
+      case "monthly":
+        return date.toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        });
+      case "weekly":
+        const weekNum = Math.ceil(date.getDate() / 7);
+        return `Minggu ${weekNum}, ${date.toLocaleDateString("id-ID", {
+          month: "long",
+          year: "numeric",
+        })}`;
+      case "daily":
+        return date.toLocaleDateString("id-ID");
+      case "hourly":
+        return date.toLocaleString("id-ID", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      case "minute":
+        return date.toLocaleString("id-ID", {
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      default:
+        return date.toLocaleString("id-ID");
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
@@ -341,25 +390,38 @@ export default function TimelineManager() {
                     🕐 Kontrol Waktu Manual
                   </Text>
 
-                  <DatePicker
-                    label="Simulasi Tanggal Sekarang"
-                    value={simulationDate}
-                    onChange={setSimulationDate}
+                  <View style={styles.currentSimulationInfo}>
+                    <Text style={styles.currentSimulationLabel}>
+                      Waktu Simulasi Saat Ini:
+                    </Text>
+                    <Text style={styles.currentSimulationValue}>
+                      {formatSimulationDateTime(activeTimeline.simulationDate)}
+                    </Text>
+                  </View>
+
+                  <TimelinePicker
+                    label={`Atur Waktu Simulasi (${getTypeLabel(
+                      activeTimeline.type
+                    )})`}
+                    value={simulationDateTime}
+                    onChange={setSimulationDateTime}
+                    timelineType={activeTimeline.type}
                   />
 
                   <Button
                     title={
-                      updating ? "Memperbarui..." : "Update Tanggal Simulasi"
+                      updating ? "Memperbarui..." : "Update Waktu Simulasi"
                     }
-                    onPress={handleUpdateSimulationDate}
+                    onPress={handleUpdateSimulationDateTime}
                     disabled={updating}
                     style={styles.updateDateButton}
                   />
 
                   <View style={styles.infoBox}>
                     <Text style={styles.infoText}>
-                      ℹ️ Mengubah tanggal simulasi akan mempengaruhi perhitungan
-                      status "terlambat" untuk semua pembayaran
+                      ℹ️ Mengubah waktu simulasi akan mempengaruhi perhitungan
+                      status "terlambat" untuk semua pembayaran berdasarkan
+                      timeline {getTypeLabel(activeTimeline.type).toLowerCase()}
                     </Text>
                   </View>
                 </View>
@@ -591,6 +653,23 @@ const styles = StyleSheet.create({
     color: "#0369a1",
     marginBottom: 16,
     textAlign: "center",
+  },
+  currentSimulationInfo: {
+    backgroundColor: "#dbeafe",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  currentSimulationLabel: {
+    fontSize: 12,
+    color: "#1e40af",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  currentSimulationValue: {
+    fontSize: 14,
+    color: "#1e40af",
+    fontWeight: "600",
   },
   updateDateButton: {
     backgroundColor: "#0369a1",

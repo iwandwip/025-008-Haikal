@@ -122,13 +122,25 @@ export const getCurrentDate = (timeline) => {
   return new Date();
 };
 
-export const updateTimelineSimulationDate = async (simulationDate) => {
+export const updateTimelineSimulationDate = async (simulationDateTime) => {
   try {
     if (!db) {
       throw new Error('Firestore belum diinisialisasi');
     }
 
     const timelineRef = doc(db, 'active_timeline', 'current');
+    
+    let simulationDate;
+    if (typeof simulationDateTime === 'string') {
+      if (simulationDateTime.includes('T')) {
+        simulationDate = simulationDateTime;
+      } else {
+        simulationDate = simulationDateTime;
+      }
+    } else {
+      simulationDate = new Date(simulationDateTime).toISOString();
+    }
+
     await updateDoc(timelineRef, {
       simulationDate: simulationDate,
       updatedAt: new Date()
