@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -31,61 +31,57 @@ function UserPaymentDetail() {
   const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [summary, setSummary] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
-  const loadData = async (isRefresh = false) => {
-    try {
-      if (!isRefresh) setLoading(true);
+  const loadData = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (!isRefresh) setLoading(true);
 
-      const result = await getUserDetailedPayments(userId);
+        const result = await getUserDetailedPayments(userId);
 
-      if (result.success) {
-        setPayments(result.payments);
-        setTimeline(result.timeline);
-        setSummary(calculateSummary(result.payments));
-      } else {
+        if (result.success) {
+          setPayments(result.payments);
+          setTimeline(result.timeline);
+        } else {
+          setPayments([]);
+          setTimeline(null);
+        }
+      } catch (error) {
+        console.error("Error loading user payment detail:", error);
         setPayments([]);
         setTimeline(null);
-        setSummary(null);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error loading user payment detail:", error);
-      setPayments([]);
-      setTimeline(null);
-      setSummary(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [userId]
+  );
 
   useEffect(() => {
     loadData();
-  }, [userId]);
+  }, [loadData]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData(true);
     setRefreshing(false);
-  };
+  }, [loadData]);
 
-  const calculateSummary = (paymentList) => {
-    const total = paymentList.length;
-    const lunas = paymentList.filter((p) => p.status === "lunas").length;
-    const belumBayar = paymentList.filter(
+  const summary = useMemo(() => {
+    if (!payments.length) return null;
+
+    const total = payments.length;
+    const lunas = payments.filter((p) => p.status === "lunas").length;
+    const belumBayar = payments.filter(
       (p) => p.status === "belum_bayar"
     ).length;
-    const terlambat = paymentList.filter(
-      (p) => p.status === "terlambat"
-    ).length;
+    const terlambat = payments.filter((p) => p.status === "terlambat").length;
 
-    const totalAmount = paymentList.reduce(
-      (sum, p) => sum + (p.amount || 0),
-      0
-    );
-    const paidAmount = paymentList
+    const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const paidAmount = payments
       .filter((p) => p.status === "lunas")
       .reduce((sum, p) => sum + (p.amount || 0), 0);
     const unpaidAmount = totalAmount - paidAmount;
@@ -103,86 +99,92 @@ function UserPaymentDetail() {
       unpaidAmount,
       progressPercentage,
     };
-  };
+  }, [payments]);
 
-  const handlePaymentPress = (payment) => {
+  const handlePaymentPress = useCallback((payment) => {
     setSelectedPayment(payment);
     setActionModalVisible(true);
-  };
+  }, []);
 
-  const handleUpdatePaymentStatus = async (newStatus, notes = "") => {
-    if (!selectedPayment || !timeline) return;
+  const handleUpdatePaymentStatus = useCallback(
+    async (newStatus, notes = "") => {
+      if (!selectedPayment || !timeline) return;
 
-    setUpdatingPayment(true);
+      setUpdatingPayment(true);
 
-    const updateData = {
-      status: newStatus,
-      updatedAt: new Date(),
-    };
+      const updateData = {
+        status: newStatus,
+        updatedAt: new Date(),
+      };
 
-    if (newStatus === "lunas") {
-      updateData.paymentDate = new Date().toISOString();
-      updateData.paymentMethod = "tunai";
-      updateData.notes = notes || "Pembayaran dikonfirmasi oleh admin";
-    }
-
-    if (notes) {
-      updateData.notes = notes;
-    }
-
-    try {
-      const result = await updateUserPaymentStatus(
-        timeline.id,
-        selectedPayment.periodKey,
-        userId,
-        updateData
-      );
-
-      if (result.success) {
-        await loadData(true);
-        Alert.alert(
-          "Berhasil!",
-          `Status pembayaran ${
-            selectedPayment.periodData?.label
-          } berhasil diperbarui menjadi ${
-            newStatus === "lunas"
-              ? "Lunas"
-              : newStatus === "belum_bayar"
-              ? "Belum Bayar"
-              : "Terlambat"
-          }.`,
-          [{ text: "OK" }]
-        );
-      } else {
-        Alert.alert(
-          "Error",
-          "Gagal memperbarui status pembayaran: " + result.error
-        );
+      if (newStatus === "lunas") {
+        updateData.paymentDate = new Date().toISOString();
+        updateData.paymentMethod = "tunai";
+        updateData.notes = notes || "Pembayaran dikonfirmasi oleh admin";
       }
-    } catch (error) {
-      Alert.alert("Error", "Terjadi kesalahan saat memperbarui pembayaran");
-      console.error("Error updating payment:", error);
-    }
 
-    setUpdatingPayment(false);
-    setActionModalVisible(false);
-    setSelectedPayment(null);
-  };
+      if (notes) {
+        updateData.notes = notes;
+      }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "lunas":
-        return colors.success;
-      case "belum_bayar":
-        return colors.error;
-      case "terlambat":
-        return colors.warning;
-      default:
-        return colors.gray500;
-    }
-  };
+      try {
+        const result = await updateUserPaymentStatus(
+          timeline.id,
+          selectedPayment.periodKey,
+          userId,
+          updateData
+        );
 
-  const getStatusLabel = (status) => {
+        if (result.success) {
+          await loadData(true);
+          Alert.alert(
+            "Berhasil!",
+            `Status pembayaran ${
+              selectedPayment.periodData?.label
+            } berhasil diperbarui menjadi ${
+              newStatus === "lunas"
+                ? "Lunas"
+                : newStatus === "belum_bayar"
+                ? "Belum Bayar"
+                : "Terlambat"
+            }.`,
+            [{ text: "OK" }]
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            "Gagal memperbarui status pembayaran: " + result.error
+          );
+        }
+      } catch (error) {
+        Alert.alert("Error", "Terjadi kesalahan saat memperbarui pembayaran");
+        console.error("Error updating payment:", error);
+      }
+
+      setUpdatingPayment(false);
+      setActionModalVisible(false);
+      setSelectedPayment(null);
+    },
+    [selectedPayment, timeline, userId, loadData]
+  );
+
+  const getStatusColor = useCallback(
+    (status) => {
+      switch (status) {
+        case "lunas":
+          return colors.success;
+        case "belum_bayar":
+          return colors.error;
+        case "terlambat":
+          return colors.warning;
+        default:
+          return colors.gray500;
+      }
+    },
+    [colors]
+  );
+
+  const getStatusLabel = useCallback((status) => {
     switch (status) {
       case "lunas":
         return "Lunas";
@@ -193,9 +195,9 @@ function UserPaymentDetail() {
       default:
         return "Unknown";
     }
-  };
+  }, []);
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = useCallback((status) => {
     switch (status) {
       case "lunas":
         return "✅";
@@ -206,17 +208,17 @@ function UserPaymentDetail() {
       default:
         return "❓";
     }
-  };
+  }, []);
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = useCallback((amount) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
       minimumFractionDigits: 0,
     }).format(amount);
-  };
+  }, []);
 
-  const formatDate = (dateString) => {
+  const formatDate = useCallback((dateString) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
     return date.toLocaleDateString("id-ID", {
@@ -224,9 +226,9 @@ function UserPaymentDetail() {
       month: "short",
       year: "numeric",
     });
-  };
+  }, []);
 
-  const renderSummaryCard = () => {
+  const renderSummaryCard = useMemo(() => {
     if (!summary) return null;
 
     return (
@@ -330,193 +332,216 @@ function UserPaymentDetail() {
         </View>
       </View>
     );
-  };
+  }, [summary, colors, formatCurrency, userName]);
 
-  const renderPaymentItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.paymentCard,
-        { backgroundColor: colors.white, borderColor: colors.gray200 },
-      ]}
-      onPress={() => handlePaymentPress(item)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.periodInfo}>
-          <Text style={[styles.periodText, { color: colors.gray900 }]}>
-            {item.periodData.label}
-          </Text>
-          <Text style={[styles.periodNumber, { color: colors.gray500 }]}>
-            Periode {item.periodData.number}
-          </Text>
-        </View>
+  const renderPaymentItem = useCallback(
+    ({ item }) => (
+      <TouchableOpacity
+        style={[
+          styles.paymentCard,
+          { backgroundColor: colors.white, borderColor: colors.gray200 },
+        ]}
+        onPress={() => handlePaymentPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.periodInfo}>
+            <Text style={[styles.periodText, { color: colors.gray900 }]}>
+              {item.periodData.label}
+            </Text>
+            <Text style={[styles.periodNumber, { color: colors.gray500 }]}>
+              Periode {item.periodData.number}
+            </Text>
+          </View>
 
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) + "15" },
-          ]}
-        >
-          <Text style={styles.statusIcon}>{getStatusIcon(item.status)}</Text>
-          <Text
-            style={[styles.statusText, { color: getStatusColor(item.status) }]}
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusColor(item.status) + "15" },
+            ]}
           >
-            {getStatusLabel(item.status)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.cardContent}>
-        <View style={styles.infoRow}>
-          <Text style={[styles.labelText, { color: colors.gray600 }]}>
-            Nominal:
-          </Text>
-          <Text style={[styles.valueText, { color: colors.gray900 }]}>
-            {formatCurrency(item.amount)}
-          </Text>
+            <Text style={styles.statusIcon}>{getStatusIcon(item.status)}</Text>
+            <Text
+              style={[
+                styles.statusText,
+                { color: getStatusColor(item.status) },
+              ]}
+            >
+              {getStatusLabel(item.status)}
+            </Text>
+          </View>
         </View>
 
-        {item.paymentDate && (
+        <View style={styles.cardContent}>
           <View style={styles.infoRow}>
             <Text style={[styles.labelText, { color: colors.gray600 }]}>
-              Tanggal Bayar:
+              Nominal:
             </Text>
             <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {formatDate(item.paymentDate)}
+              {formatCurrency(item.amount)}
             </Text>
           </View>
-        )}
 
-        {item.paymentMethod && (
-          <View style={styles.infoRow}>
-            <Text style={[styles.labelText, { color: colors.gray600 }]}>
-              Metode:
-            </Text>
-            <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {item.paymentMethod === "tunai" ? "Tunai" : "Online"}
-            </Text>
-          </View>
-        )}
+          {item.paymentDate && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Tanggal Bayar:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.gray900 }]}>
+                {formatDate(item.paymentDate)}
+              </Text>
+            </View>
+          )}
 
-        {item.notes && (
-          <View style={styles.infoRow}>
-            <Text style={[styles.labelText, { color: colors.gray600 }]}>
-              Catatan:
-            </Text>
-            <Text style={[styles.valueText, { color: colors.gray700 }]}>
-              {item.notes}
-            </Text>
-          </View>
-        )}
-      </View>
+          {item.paymentMethod && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Metode:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.gray900 }]}>
+                {item.paymentMethod === "tunai" ? "Tunai" : "Online"}
+              </Text>
+            </View>
+          )}
 
-      <View style={styles.cardFooter}>
-        <Text style={[styles.tapHint, { color: colors.gray500 }]}>
-          Ketuk untuk ubah status
-        </Text>
-        <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const renderActionModal = () => (
-    <Modal
-      visible={actionModalVisible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => !updatingPayment && setActionModalVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Ubah Status Pembayaran</Text>
-            {!updatingPayment && (
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setActionModalVisible(false)}
-              >
-                <Text style={styles.closeButtonText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <ScrollView style={styles.modalContent}>
-            {selectedPayment && (
-              <View style={styles.paymentInfo}>
-                <Text style={styles.paymentTitle}>
-                  {selectedPayment.periodData?.label}
-                </Text>
-                <Text style={styles.paymentAmount}>
-                  {formatCurrency(selectedPayment.amount)}
-                </Text>
-                <Text style={styles.currentStatus}>
-                  Status saat ini: {getStatusLabel(selectedPayment.status)}
-                </Text>
-              </View>
-            )}
-
-            {updatingPayment ? (
-              <View style={styles.loadingSection}>
-                <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.loadingText}>
-                  Memperbarui status pembayaran...
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.actionButtons}>
-                <Button
-                  title="✅ Tandai Lunas"
-                  onPress={() => handleUpdatePaymentStatus("lunas")}
-                  style={[
-                    styles.actionButton,
-                    { backgroundColor: colors.success },
-                  ]}
-                />
-
-                <Button
-                  title="❌ Tandai Belum Bayar"
-                  onPress={() => handleUpdatePaymentStatus("belum_bayar")}
-                  style={[
-                    styles.actionButton,
-                    { backgroundColor: colors.error },
-                  ]}
-                />
-
-                <Button
-                  title="⚠️ Tandai Terlambat"
-                  onPress={() => handleUpdatePaymentStatus("terlambat")}
-                  style={[
-                    styles.actionButton,
-                    { backgroundColor: colors.warning },
-                  ]}
-                />
-              </View>
-            )}
-          </ScrollView>
+          {item.notes && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Catatan:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.gray700 }]}>
+                {item.notes}
+              </Text>
+            </View>
+          )}
         </View>
-      </View>
-    </Modal>
+
+        <View style={styles.cardFooter}>
+          <Text style={[styles.tapHint, { color: colors.gray500 }]}>
+            Ketuk untuk ubah status
+          </Text>
+          <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
+        </View>
+      </TouchableOpacity>
+    ),
+    [
+      colors,
+      getStatusColor,
+      getStatusIcon,
+      getStatusLabel,
+      formatCurrency,
+      formatDate,
+      handlePaymentPress,
+    ]
   );
 
-  const renderLoadingState = () => (
-    <View style={styles.loadingContainer}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={[styles.loadingText, { color: colors.gray600 }]}>
-        Memuat detail pembayaran...
-      </Text>
-    </View>
+  const listData = useMemo(() => {
+    return [{ type: "summary" }, ...payments];
+  }, [payments]);
+
+  const keyExtractor = useCallback(
+    (item, index) => (item.type === "summary" ? "summary" : item.id),
+    []
   );
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={[styles.emptyIcon, { color: colors.gray400 }]}>📊</Text>
-      <Text style={[styles.emptyText, { color: colors.gray600 }]}>
-        Belum ada data pembayaran
-      </Text>
-      <Text style={[styles.emptySubtext, { color: colors.gray500 }]}>
-        Data pembayaran akan muncul setelah timeline dibuat
-      </Text>
-    </View>
+  const renderItem = useCallback(
+    ({ item }) => {
+      if (item.type === "summary") {
+        return renderSummaryCard;
+      }
+      return renderPaymentItem({ item });
+    },
+    [renderSummaryCard, renderPaymentItem]
+  );
+
+  const renderActionModal = useCallback(
+    () => (
+      <Modal
+        visible={actionModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => !updatingPayment && setActionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ubah Status Pembayaran</Text>
+              {!updatingPayment && (
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setActionModalVisible(false)}
+                >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              {selectedPayment && (
+                <View style={styles.paymentInfo}>
+                  <Text style={styles.paymentTitle}>
+                    {selectedPayment.periodData?.label}
+                  </Text>
+                  <Text style={styles.paymentAmount}>
+                    {formatCurrency(selectedPayment.amount)}
+                  </Text>
+                  <Text style={styles.currentStatus}>
+                    Status saat ini: {getStatusLabel(selectedPayment.status)}
+                  </Text>
+                </View>
+              )}
+
+              {updatingPayment ? (
+                <View style={styles.loadingSection}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>
+                    Memperbarui status pembayaran...
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.actionButtons}>
+                  <Button
+                    title="✅ Tandai Lunas"
+                    onPress={() => handleUpdatePaymentStatus("lunas")}
+                    style={[
+                      styles.actionButton,
+                      { backgroundColor: colors.success },
+                    ]}
+                  />
+
+                  <Button
+                    title="❌ Tandai Belum Bayar"
+                    onPress={() => handleUpdatePaymentStatus("belum_bayar")}
+                    style={[
+                      styles.actionButton,
+                      { backgroundColor: colors.error },
+                    ]}
+                  />
+
+                  <Button
+                    title="⚠️ Tandai Terlambat"
+                    onPress={() => handleUpdatePaymentStatus("terlambat")}
+                    style={[
+                      styles.actionButton,
+                      { backgroundColor: colors.warning },
+                    ]}
+                  />
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    ),
+    [
+      actionModalVisible,
+      updatingPayment,
+      selectedPayment,
+      colors,
+      formatCurrency,
+      getStatusLabel,
+      handleUpdatePaymentStatus,
+    ]
   );
 
   const styles = createStyles(colors);
@@ -533,7 +558,12 @@ function UserPaymentDetail() {
           </TouchableOpacity>
           <Text style={styles.title}>Detail Pembayaran</Text>
         </View>
-        {renderLoadingState()}
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.gray600 }]}>
+            Memuat detail pembayaran...
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -556,16 +586,9 @@ function UserPaymentDetail() {
 
       {payments.length > 0 ? (
         <FlatList
-          data={[{ type: "summary" }, ...payments]}
-          renderItem={({ item }) => {
-            if (item.type === "summary") {
-              return renderSummaryCard();
-            }
-            return renderPaymentItem({ item });
-          }}
-          keyExtractor={(item, index) =>
-            item.type === "summary" ? "summary" : item.id
-          }
+          data={listData}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -578,9 +601,21 @@ function UserPaymentDetail() {
               titleColor={colors.gray600}
             />
           }
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+          removeClippedSubviews={true}
         />
       ) : (
-        renderEmptyState()
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyIcon, { color: colors.gray400 }]}>📊</Text>
+          <Text style={[styles.emptyText, { color: colors.gray600 }]}>
+            Belum ada data pembayaran
+          </Text>
+          <Text style={[styles.emptySubtext, { color: colors.gray500 }]}>
+            Data pembayaran akan muncul setelah timeline dibuat
+          </Text>
+        </View>
       )}
 
       {renderActionModal()}
@@ -629,6 +664,17 @@ const createStyles = (colors) =>
       textAlign: "center",
       marginTop: 4,
       fontWeight: "500",
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+    },
+    loadingText: {
+      fontSize: 16,
+      marginTop: 16,
+      textAlign: "center",
     },
     listContent: {
       padding: 24,
@@ -869,17 +915,6 @@ const createStyles = (colors) =>
     loadingSection: {
       alignItems: "center",
       paddingVertical: 40,
-    },
-    loadingText: {
-      fontSize: 16,
-      marginTop: 16,
-      textAlign: "center",
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
     },
     emptyContainer: {
       flex: 1,

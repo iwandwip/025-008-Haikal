@@ -10,6 +10,15 @@ import {
 import { db } from './firebase';
 import { getActiveTimeline } from './timelineService';
 
+let cachedPayments = new Map();
+let cachedTimeline = null;
+let cacheTimestamp = null;
+const CACHE_DURATION = 30000;
+
+const isCacheValid = () => {
+  return cacheTimestamp && (Date.now() - cacheTimestamp) < CACHE_DURATION;
+};
+
 export const getWaliPaymentHistory = async (santriId) => {
   try {
     if (!db) {
@@ -18,6 +27,17 @@ export const getWaliPaymentHistory = async (santriId) => {
 
     if (!santriId) {
       return { success: false, error: 'Santri ID tidak ditemukan', payments: [], timeline: null };
+    }
+
+    let timeline;
+    const cacheKey = santriId;
+
+    if (isCacheValid() && cachedTimeline && cachedPayments.has(cacheKey)) {
+      return {
+        success: true,
+        payments: cachedPayments.get(cacheKey),
+        timeline: cachedTimeline
+      };
     }
 
     const timelineResult = await getActiveTimeline();
@@ -30,55 +50,29 @@ export const getWaliPaymentHistory = async (santriId) => {
       };
     }
 
-    const timeline = timelineResult.timeline;
-    const allPayments = [];
+    timeline = timelineResult.timeline;
+    const activePeriods = Object.keys(timeline.periods).filter(
+      periodKey => timeline.periods[periodKey].active
+    );
 
-    for (const periodKey of Object.keys(timeline.periods)) {
-      const period = timeline.periods[periodKey];
-      if (period.active) {
-        try {
-          const paymentsRef = collection(
-            db, 
-            'payments', 
-            timeline.id, 
-            'periods', 
-            periodKey, 
-            'santri_payments'
-          );
-          
-          const q = query(paymentsRef, where('santriId', '==', santriId));
-          const querySnapshot = await getDocs(q);
-          
-          if (querySnapshot.empty) {
-            allPayments.push({
-              id: `${santriId}_${periodKey}`,
-              santriId: santriId,
-              period: periodKey,
-              periodLabel: period.label,
-              amount: period.amount,
-              status: 'belum_bayar',
-              paymentDate: null,
-              paymentMethod: null,
-              notes: '',
-              periodData: period,
-              periodKey: periodKey,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-          } else {
-            querySnapshot.forEach((doc) => {
-              const paymentData = doc.data();
-              allPayments.push({
-                id: doc.id,
-                ...paymentData,
-                periodData: period,
-                periodKey: periodKey
-              });
-            });
-          }
-        } catch (periodError) {
-          console.warn(`Error loading period ${periodKey}:`, periodError);
-          allPayments.push({
+    const paymentPromises = activePeriods.map(async (periodKey) => {
+      try {
+        const paymentsRef = collection(
+          db, 
+          'payments', 
+          timeline.id, 
+          'periods', 
+          periodKey, 
+          'santri_payments'
+        );
+        
+        const q = query(paymentsRef, where('santriId', '==', santriId));
+        const querySnapshot = await getDocs(q);
+        
+        const period = timeline.periods[periodKey];
+        
+        if (querySnapshot.empty) {
+          return {
             id: `${santriId}_${periodKey}`,
             santriId: santriId,
             period: periodKey,
@@ -92,16 +86,48 @@ export const getWaliPaymentHistory = async (santriId) => {
             periodKey: periodKey,
             createdAt: new Date(),
             updatedAt: new Date()
-          });
+          };
+        } else {
+          const paymentData = querySnapshot.docs[0].data();
+          return {
+            id: querySnapshot.docs[0].id,
+            ...paymentData,
+            periodData: period,
+            periodKey: periodKey
+          };
         }
+      } catch (periodError) {
+        console.warn(`Error loading period ${periodKey}:`, periodError);
+        const period = timeline.periods[periodKey];
+        return {
+          id: `${santriId}_${periodKey}`,
+          santriId: santriId,
+          period: periodKey,
+          periodLabel: period.label,
+          amount: period.amount,
+          status: 'belum_bayar',
+          paymentDate: null,
+          paymentMethod: null,
+          notes: '',
+          periodData: period,
+          periodKey: periodKey,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
       }
-    }
+    });
+
+    const allPayments = await Promise.all(paymentPromises);
 
     allPayments.sort((a, b) => {
       const periodA = parseInt(a.periodKey.replace('period_', ''));
       const periodB = parseInt(b.periodKey.replace('period_', ''));
       return periodA - periodB;
     });
+
+    cachedPayments.set(cacheKey, allPayments);
+    cachedTimeline = timeline;
+    cacheTimestamp = Date.now();
 
     return { success: true, payments: allPayments, timeline };
   } catch (error) {
@@ -139,9 +165,8 @@ export const updateWaliPaymentStatus = async (timelineId, periodKey, santriId, u
       await updateDoc(paymentRef, updatePayload);
     } catch (updateError) {
       if (updateError.code === 'not-found') {
-        const timelineResult = await getActiveTimeline();
-        if (timelineResult.success) {
-          const timeline = timelineResult.timeline;
+        const timeline = cachedTimeline || (await getActiveTimeline()).timeline;
+        if (timeline) {
           const period = timeline.periods[periodKey];
           
           if (period) {
@@ -166,6 +191,9 @@ export const updateWaliPaymentStatus = async (timelineId, periodKey, santriId, u
         throw updateError;
       }
     }
+
+    cachedPayments.delete(santriId);
+    cacheTimestamp = null;
 
     return { success: true };
   } catch (error) {
@@ -198,4 +226,10 @@ export const getPaymentSummary = (payments) => {
     unpaidAmount,
     progressPercentage
   };
+};
+
+export const clearWaliCache = () => {
+  cachedPayments.clear();
+  cachedTimeline = null;
+  cacheTimestamp = null;
 };

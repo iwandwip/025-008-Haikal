@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -29,135 +29,136 @@ function StatusPembayaran() {
   const [payments, setPayments] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [renderingData, setRenderingData] = useState(false);
-  const [loadingText, setLoadingText] = useState("Memuat data pembayaran...");
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
-  const loadData = async (isRefresh = false) => {
-    try {
-      if (!userProfile?.id) {
+  const loadData = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (!userProfile?.id) {
+          setPayments([]);
+          setSummary(null);
+          setTimeline(null);
+          setLoading(false);
+          return;
+        }
+
+        if (!isRefresh) setLoading(true);
+
+        const result = await getWaliPaymentHistory(userProfile.id);
+
+        if (result.success) {
+          setPayments(result.payments);
+          setTimeline(result.timeline);
+          setSummary(getPaymentSummary(result.payments));
+        } else {
+          setPayments([]);
+          setSummary(null);
+          setTimeline(null);
+        }
+      } catch (error) {
+        console.error("Error loading payment data:", error);
         setPayments([]);
         setSummary(null);
         setTimeline(null);
+      } finally {
         setLoading(false);
-        setRenderingData(false);
-        return;
       }
-
-      if (!isRefresh) {
-        setLoadingText("Mengambil timeline aktif...");
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-
-      setLoadingText("Memuat data pembayaran...");
-      const result = await getWaliPaymentHistory(userProfile.id);
-
-      if (result.success) {
-        if (!isRefresh) {
-          setLoadingText("Menyiapkan data...");
-          await new Promise((resolve) => setTimeout(resolve, 300));
-        }
-
-        setRenderingData(true);
-        setLoading(false);
-
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
-        setPayments(result.payments);
-        setTimeline(result.timeline);
-        setSummary(getPaymentSummary(result.payments));
-
-        if (!isRefresh) {
-          setLoadingText("Menyelesaikan...");
-          await new Promise((resolve) => setTimeout(resolve, 400));
-        }
-
-        setRenderingData(false);
-      } else {
-        setPayments([]);
-        setSummary(null);
-        setTimeline(null);
-        setLoading(false);
-        setRenderingData(false);
-      }
-    } catch (error) {
-      console.error("Error loading payment data:", error);
-      setPayments([]);
-      setSummary(null);
-      setTimeline(null);
-      setLoading(false);
-      setRenderingData(false);
-    }
-  };
+    },
+    [userProfile?.id]
+  );
 
   useEffect(() => {
     loadData();
-  }, [userProfile]);
+  }, [loadData]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await loadData(true);
     setRefreshing(false);
-  };
+  }, [loadData]);
 
-  const handlePayNow = (payment) => {
+  const handlePayNow = useCallback((payment) => {
     setSelectedPayment(payment);
     setPaymentModalVisible(true);
-  };
+  }, []);
 
-  const handlePaymentSuccess = async (payment, paymentMethod) => {
-    setUpdatingPayment(true);
+  const handlePaymentSuccess = useCallback(
+    async (payment, paymentMethod) => {
+      setUpdatingPayment(true);
 
-    try {
-      const result = await updateWaliPaymentStatus(
-        timeline.id,
-        payment.periodKey,
-        userProfile.id,
-        {
-          status: "lunas",
-          paymentDate: new Date().toISOString(),
-          paymentMethod: paymentMethod,
-          notes: `Pembayaran melalui ${paymentMethod}`,
+      try {
+        const result = await updateWaliPaymentStatus(
+          timeline.id,
+          payment.periodKey,
+          userProfile.id,
+          {
+            status: "lunas",
+            paymentDate: new Date().toISOString(),
+            paymentMethod: paymentMethod,
+            notes: `Pembayaran melalui ${paymentMethod}`,
+          }
+        );
+
+        if (result.success) {
+          await loadData(true);
+          Alert.alert(
+            "Pembayaran Berhasil! 🎉",
+            `Pembayaran ${payment.periodData?.label} telah berhasil diproses.`,
+            [{ text: "OK" }]
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            "Gagal memperbarui status pembayaran: " + result.error
+          );
         }
-      );
-
-      if (result.success) {
-        await loadData(true);
-        Alert.alert(
-          "Pembayaran Berhasil! 🎉",
-          `Pembayaran ${payment.periodData?.label} telah berhasil diproses.`,
-          [{ text: "OK" }]
-        );
-      } else {
-        Alert.alert(
-          "Error",
-          "Gagal memperbarui status pembayaran: " + result.error
-        );
+      } catch (error) {
+        Alert.alert("Error", "Terjadi kesalahan saat memperbarui pembayaran");
+        console.error("Error updating payment:", error);
       }
-    } catch (error) {
-      Alert.alert("Error", "Terjadi kesalahan saat memperbarui pembayaran");
-      console.error("Error updating payment:", error);
-    }
 
-    setUpdatingPayment(false);
-  };
+      setUpdatingPayment(false);
+    },
+    [timeline?.id, userProfile?.id, loadData]
+  );
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "lunas":
-        return colors.success;
-      case "belum_bayar":
-        return colors.error;
-      case "terlambat":
-        return colors.warning;
-      default:
-        return colors.gray500;
-    }
-  };
+  const getStatusColor = useCallback(
+    (status) => {
+      switch (status) {
+        case "lunas":
+          return colors.success;
+        case "belum_bayar":
+          return colors.error;
+        case "terlambat":
+          return colors.warning;
+        default:
+          return colors.gray500;
+      }
+    },
+    [colors]
+  );
 
-  const getStatusLabel = (status) => {
+  const formatCurrency = useCallback((amount) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
+  }, []);
+
+  const formatDate = useCallback((dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, []);
+
+  const getStatusLabel = useCallback((status) => {
     switch (status) {
       case "lunas":
         return "Lunas";
@@ -168,9 +169,9 @@ function StatusPembayaran() {
       default:
         return "Unknown";
     }
-  };
+  }, []);
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = useCallback((status) => {
     switch (status) {
       case "lunas":
         return "✅";
@@ -181,105 +182,9 @@ function StatusPembayaran() {
       default:
         return "❓";
     }
-  };
+  }, []);
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const renderLoadingScreen = () => (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
-        {userProfile && (
-          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
-        )}
-      </View>
-
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingCard}>
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-            style={styles.loadingSpinner}
-          />
-          <Text style={[styles.loadingMainText, { color: colors.gray900 }]}>
-            {loadingText}
-          </Text>
-          <Text style={[styles.loadingSubText, { color: colors.gray600 }]}>
-            Mohon tunggu sebentar...
-          </Text>
-
-          <View style={styles.loadingProgress}>
-            <View
-              style={[styles.progressBar, { backgroundColor: colors.gray200 }]}
-            >
-              <View
-                style={[
-                  styles.progressFill,
-                  { backgroundColor: colors.primary },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-
-  const renderDataLoadingScreen = () => (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
-        {userProfile && (
-          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
-        )}
-        {timeline && (
-          <Text style={styles.timelineInfo}>Timeline: {timeline.name}</Text>
-        )}
-      </View>
-
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingCard}>
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-            style={styles.loadingSpinner}
-          />
-          <Text style={[styles.loadingMainText, { color: colors.gray900 }]}>
-            Menyiapkan Data Pembayaran
-          </Text>
-          <Text style={[styles.loadingSubText, { color: colors.gray600 }]}>
-            Sedang memproses data pembayaran...
-          </Text>
-
-          <View style={styles.renderingProgress}>
-            <View style={styles.dotsContainer}>
-              <View style={[styles.dot, styles.dot1]} />
-              <View style={[styles.dot, styles.dot2]} />
-              <View style={[styles.dot, styles.dot3]} />
-            </View>
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-
-  const renderSummaryCard = () => {
+  const renderSummaryCard = useMemo(() => {
     if (!summary) return null;
 
     return (
@@ -383,118 +288,166 @@ function StatusPembayaran() {
         </View>
       </View>
     );
-  };
+  }, [summary, colors, formatCurrency]);
 
-  const renderPaymentItem = ({ item }) => (
-    <View
-      style={[
-        styles.paymentCard,
-        { backgroundColor: colors.white, borderColor: colors.gray200 },
-      ]}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.periodInfo}>
-          <Text style={[styles.periodText, { color: colors.gray900 }]}>
-            {item.periodData.label}
-          </Text>
-          <Text style={[styles.periodNumber, { color: colors.gray500 }]}>
-            Periode {item.periodData.number}
-          </Text>
-        </View>
+  const renderPaymentItem = useCallback(
+    ({ item }) => (
+      <View
+        style={[
+          styles.paymentCard,
+          { backgroundColor: colors.white, borderColor: colors.gray200 },
+        ]}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.periodInfo}>
+            <Text style={[styles.periodText, { color: colors.gray900 }]}>
+              {item.periodData.label}
+            </Text>
+            <Text style={[styles.periodNumber, { color: colors.gray500 }]}>
+              Periode {item.periodData.number}
+            </Text>
+          </View>
 
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) + "15" },
-          ]}
-        >
-          <Text style={styles.statusIcon}>{getStatusIcon(item.status)}</Text>
-          <Text
-            style={[styles.statusText, { color: getStatusColor(item.status) }]}
+          <View
+            style={[
+              styles.statusBadge,
+              { backgroundColor: getStatusColor(item.status) + "15" },
+            ]}
           >
-            {getStatusLabel(item.status)}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.cardContent}>
-        <View style={styles.infoRow}>
-          <Text style={[styles.labelText, { color: colors.gray600 }]}>
-            Nominal:
-          </Text>
-          <Text style={[styles.valueText, { color: colors.gray900 }]}>
-            {formatCurrency(item.amount)}
-          </Text>
+            <Text style={styles.statusIcon}>{getStatusIcon(item.status)}</Text>
+            <Text
+              style={[
+                styles.statusText,
+                { color: getStatusColor(item.status) },
+              ]}
+            >
+              {getStatusLabel(item.status)}
+            </Text>
+          </View>
         </View>
 
-        {item.paymentDate && (
+        <View style={styles.cardContent}>
           <View style={styles.infoRow}>
             <Text style={[styles.labelText, { color: colors.gray600 }]}>
-              Tanggal Bayar:
+              Nominal:
             </Text>
             <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {formatDate(item.paymentDate)}
+              {formatCurrency(item.amount)}
             </Text>
           </View>
+
+          {item.paymentDate && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Tanggal Bayar:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.gray900 }]}>
+                {formatDate(item.paymentDate)}
+              </Text>
+            </View>
+          )}
+
+          {item.paymentMethod && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Metode:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.gray900 }]}>
+                {item.paymentMethod === "tunai" ? "Tunai" : "Online"}
+              </Text>
+            </View>
+          )}
+
+          {item.notes && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Catatan:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.gray700 }]}>
+                {item.notes}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {item.status === "belum_bayar" && (
+          <TouchableOpacity
+            style={[styles.payButton, { backgroundColor: colors.primary }]}
+            onPress={() => handlePayNow(item)}
+            disabled={updatingPayment}
+          >
+            <Text style={[styles.payButtonText, { color: colors.white }]}>
+              💳 Bayar Sekarang
+            </Text>
+          </TouchableOpacity>
         )}
 
-        {item.paymentMethod && (
-          <View style={styles.infoRow}>
-            <Text style={[styles.labelText, { color: colors.gray600 }]}>
-              Metode:
+        {item.status === "terlambat" && (
+          <TouchableOpacity
+            style={[styles.payButton, { backgroundColor: colors.warning }]}
+            onPress={() => handlePayNow(item)}
+            disabled={updatingPayment}
+          >
+            <Text style={[styles.payButtonText, { color: colors.white }]}>
+              ⚡ Bayar Segera
             </Text>
-            <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {item.paymentMethod === "tunai" ? "Tunai" : "Online"}
-            </Text>
-          </View>
-        )}
-
-        {item.notes && (
-          <View style={styles.infoRow}>
-            <Text style={[styles.labelText, { color: colors.gray600 }]}>
-              Catatan:
-            </Text>
-            <Text style={[styles.valueText, { color: colors.gray700 }]}>
-              {item.notes}
-            </Text>
-          </View>
+          </TouchableOpacity>
         )}
       </View>
+    ),
+    [
+      colors,
+      getStatusColor,
+      getStatusIcon,
+      getStatusLabel,
+      formatCurrency,
+      formatDate,
+      handlePayNow,
+      updatingPayment,
+    ]
+  );
 
-      {item.status === "belum_bayar" && (
-        <TouchableOpacity
-          style={[styles.payButton, { backgroundColor: colors.primary }]}
-          onPress={() => handlePayNow(item)}
-          disabled={updatingPayment}
-        >
-          <Text style={[styles.payButtonText, { color: colors.white }]}>
-            💳 Bayar Sekarang
-          </Text>
-        </TouchableOpacity>
-      )}
+  const listData = useMemo(() => {
+    return [{ type: "summary" }, ...payments];
+  }, [payments]);
 
-      {item.status === "terlambat" && (
-        <TouchableOpacity
-          style={[styles.payButton, { backgroundColor: colors.warning }]}
-          onPress={() => handlePayNow(item)}
-          disabled={updatingPayment}
-        >
-          <Text style={[styles.payButtonText, { color: colors.white }]}>
-            ⚡ Bayar Segera
-          </Text>
-        </TouchableOpacity>
-      )}
-    </View>
+  const keyExtractor = useCallback(
+    (item, index) => (item.type === "summary" ? "summary" : item.id),
+    []
+  );
+
+  const renderItem = useCallback(
+    ({ item }) => {
+      if (item.type === "summary") {
+        return renderSummaryCard;
+      }
+      return renderPaymentItem({ item });
+    },
+    [renderSummaryCard, renderPaymentItem]
   );
 
   const styles = createStyles(colors);
 
   if (loading) {
-    return renderLoadingScreen();
-  }
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
+          {userProfile && (
+            <Text style={styles.subtitle}>
+              Santri: {userProfile.namaSantri}
+            </Text>
+          )}
+        </View>
 
-  if (renderingData) {
-    return renderDataLoadingScreen();
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.gray600 }]}>
+            Memuat data pembayaran...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -511,16 +464,9 @@ function StatusPembayaran() {
 
       {payments.length > 0 ? (
         <FlatList
-          data={[{ type: "summary" }, ...payments]}
-          renderItem={({ item, index }) => {
-            if (item.type === "summary") {
-              return renderSummaryCard();
-            }
-            return renderPaymentItem({ item });
-          }}
-          keyExtractor={(item, index) =>
-            item.type === "summary" ? "summary" : item.id
-          }
+          data={listData}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -618,71 +564,10 @@ const createStyles = (colors) =>
       alignItems: "center",
       paddingHorizontal: 24,
     },
-    loadingCard: {
-      backgroundColor: colors.white,
-      borderRadius: 20,
-      padding: 40,
-      alignItems: "center",
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.15,
-      shadowRadius: 20,
-      elevation: 10,
-      borderWidth: 1,
-      borderColor: colors.gray200,
-      minWidth: 300,
-    },
-    loadingSpinner: {
-      marginBottom: 20,
-    },
-    loadingMainText: {
-      fontSize: 18,
-      fontWeight: "600",
+    loadingText: {
+      fontSize: 16,
+      marginTop: 16,
       textAlign: "center",
-      marginBottom: 8,
-    },
-    loadingSubText: {
-      fontSize: 14,
-      textAlign: "center",
-      marginBottom: 24,
-    },
-    loadingProgress: {
-      width: "100%",
-    },
-    progressBar: {
-      height: 8,
-      borderRadius: 4,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: 4,
-      width: "70%",
-    },
-    renderingProgress: {
-      marginTop: 10,
-      alignItems: "center",
-    },
-    dotsContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: colors.primary,
-      marginHorizontal: 4,
-    },
-    dot1: {
-      opacity: 1,
-    },
-    dot2: {
-      opacity: 0.7,
-    },
-    dot3: {
-      opacity: 0.4,
     },
     listContent: {
       padding: 24,
@@ -720,6 +605,15 @@ const createStyles = (colors) =>
     progressPercentage: {
       fontSize: 16,
       fontWeight: "700",
+    },
+    progressBar: {
+      height: 8,
+      borderRadius: 4,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 4,
     },
     summaryStats: {
       marginBottom: 16,

@@ -6,10 +6,20 @@ import {
   doc,
   getDoc,
   updateDoc,
-  setDoc
+  setDoc,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getActiveTimeline } from './timelineService';
+
+let cachedUsers = null;
+let cachedTimeline = null;
+let cacheTimestamp = null;
+const CACHE_DURATION = 30000;
+
+const isCacheValid = () => {
+  return cacheTimestamp && (Date.now() - cacheTimestamp) < CACHE_DURATION;
+};
 
 export const getAllUsersPaymentStatus = async () => {
   try {
@@ -17,36 +27,44 @@ export const getAllUsersPaymentStatus = async () => {
       return { success: true, users: [], timeline: null };
     }
 
-    const timelineResult = await getActiveTimeline();
-    if (!timelineResult.success) {
-      return { 
-        success: false, 
-        error: 'Timeline aktif tidak ditemukan', 
-        users: [], 
-        timeline: null 
-      };
+    let timeline, users;
+
+    if (isCacheValid() && cachedUsers && cachedTimeline) {
+      timeline = cachedTimeline;
+      users = cachedUsers;
+    } else {
+      const [timelineResult, usersResult] = await Promise.all([
+        getActiveTimeline(),
+        getAllUsers()
+      ]);
+
+      if (!timelineResult.success) {
+        return { 
+          success: false, 
+          error: 'Timeline aktif tidak ditemukan', 
+          users: [], 
+          timeline: null 
+        };
+      }
+
+      timeline = timelineResult.timeline;
+      users = usersResult.success ? usersResult.users.filter(user => user.role === 'user') : [];
+      
+      cachedTimeline = timeline;
+      cachedUsers = users;
+      cacheTimestamp = Date.now();
     }
 
-    const timeline = timelineResult.timeline;
-    
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('role', '==', 'user'));
-    const usersSnapshot = await getDocs(q);
-    
-    const usersWithPaymentStatus = [];
-    
-    for (const userDoc of usersSnapshot.docs) {
-      const userData = userDoc.data();
-      const userId = userDoc.id;
-      
-      const paymentSummary = await getUserPaymentSummary(userId, timeline);
-      
-      usersWithPaymentStatus.push({
-        id: userId,
-        ...userData,
-        paymentSummary
-      });
-    }
+    const userPaymentPromises = users.map(user => 
+      getUserPaymentSummaryOptimized(user.id, timeline)
+        .then(paymentSummary => ({
+          id: user.id,
+          ...user,
+          paymentSummary
+        }))
+    );
+
+    const usersWithPaymentStatus = await Promise.all(userPaymentPromises);
 
     usersWithPaymentStatus.sort((a, b) => {
       if (a.namaSantri && b.namaSantri) {
@@ -62,49 +80,30 @@ export const getAllUsersPaymentStatus = async () => {
   }
 };
 
-export const getUserPaymentSummary = async (userId, timeline) => {
+export const getUserPaymentSummaryOptimized = async (userId, timeline) => {
   try {
-    const allPayments = [];
-    
-    for (const periodKey of Object.keys(timeline.periods)) {
-      const period = timeline.periods[periodKey];
-      if (period.active) {
-        try {
-          const paymentsRef = collection(
-            db, 
-            'payments', 
-            timeline.id, 
-            'periods', 
-            periodKey, 
-            'santri_payments'
-          );
-          
-          const q = query(paymentsRef, where('santriId', '==', userId));
-          const querySnapshot = await getDocs(q);
-          
-          if (querySnapshot.empty) {
-            allPayments.push({
-              id: `${userId}_${periodKey}`,
-              santriId: userId,
-              period: periodKey,
-              amount: period.amount,
-              status: 'belum_bayar',
-              paymentDate: null,
-              periodData: period
-            });
-          } else {
-            querySnapshot.forEach((doc) => {
-              const paymentData = doc.data();
-              allPayments.push({
-                id: doc.id,
-                ...paymentData,
-                periodData: period
-              });
-            });
-          }
-        } catch (periodError) {
-          console.warn(`Error loading period ${periodKey} for user ${userId}:`, periodError);
-          allPayments.push({
+    const activePeriods = Object.keys(timeline.periods).filter(
+      periodKey => timeline.periods[periodKey].active
+    );
+
+    const paymentPromises = activePeriods.map(async (periodKey) => {
+      try {
+        const paymentsRef = collection(
+          db, 
+          'payments', 
+          timeline.id, 
+          'periods', 
+          periodKey, 
+          'santri_payments'
+        );
+        
+        const q = query(paymentsRef, where('santriId', '==', userId));
+        const querySnapshot = await getDocs(q);
+        
+        const period = timeline.periods[periodKey];
+        
+        if (querySnapshot.empty) {
+          return {
             id: `${userId}_${periodKey}`,
             santriId: userId,
             period: periodKey,
@@ -112,10 +111,30 @@ export const getUserPaymentSummary = async (userId, timeline) => {
             status: 'belum_bayar',
             paymentDate: null,
             periodData: period
-          });
+          };
+        } else {
+          const paymentData = querySnapshot.docs[0].data();
+          return {
+            id: querySnapshot.docs[0].id,
+            ...paymentData,
+            periodData: period
+          };
         }
+      } catch (periodError) {
+        const period = timeline.periods[periodKey];
+        return {
+          id: `${userId}_${periodKey}`,
+          santriId: userId,
+          period: periodKey,
+          amount: period.amount,
+          status: 'belum_bayar',
+          paymentDate: null,
+          periodData: period
+        };
       }
-    }
+    });
+
+    const allPayments = await Promise.all(paymentPromises);
 
     const total = allPayments.length;
     const lunas = allPayments.filter(p => p.status === 'lunas').length;
@@ -167,8 +186,8 @@ export const getUserDetailedPayments = async (userId) => {
       return { success: false, error: 'User ID tidak ditemukan', payments: [], timeline: null };
     }
 
-    const timelineResult = await getActiveTimeline();
-    if (!timelineResult.success) {
+    const timeline = cachedTimeline || (await getActiveTimeline()).timeline;
+    if (!timeline) {
       return { 
         success: false, 
         error: 'Timeline aktif tidak ditemukan', 
@@ -177,55 +196,28 @@ export const getUserDetailedPayments = async (userId) => {
       };
     }
 
-    const timeline = timelineResult.timeline;
-    const allPayments = [];
+    const activePeriods = Object.keys(timeline.periods).filter(
+      periodKey => timeline.periods[periodKey].active
+    );
 
-    for (const periodKey of Object.keys(timeline.periods)) {
-      const period = timeline.periods[periodKey];
-      if (period.active) {
-        try {
-          const paymentsRef = collection(
-            db, 
-            'payments', 
-            timeline.id, 
-            'periods', 
-            periodKey, 
-            'santri_payments'
-          );
-          
-          const q = query(paymentsRef, where('santriId', '==', userId));
-          const querySnapshot = await getDocs(q);
-          
-          if (querySnapshot.empty) {
-            allPayments.push({
-              id: `${userId}_${periodKey}`,
-              santriId: userId,
-              period: periodKey,
-              periodLabel: period.label,
-              amount: period.amount,
-              status: 'belum_bayar',
-              paymentDate: null,
-              paymentMethod: null,
-              notes: '',
-              periodData: period,
-              periodKey: periodKey,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            });
-          } else {
-            querySnapshot.forEach((doc) => {
-              const paymentData = doc.data();
-              allPayments.push({
-                id: doc.id,
-                ...paymentData,
-                periodData: period,
-                periodKey: periodKey
-              });
-            });
-          }
-        } catch (periodError) {
-          console.warn(`Error loading period ${periodKey}:`, periodError);
-          allPayments.push({
+    const paymentPromises = activePeriods.map(async (periodKey) => {
+      try {
+        const paymentsRef = collection(
+          db, 
+          'payments', 
+          timeline.id, 
+          'periods', 
+          periodKey, 
+          'santri_payments'
+        );
+        
+        const q = query(paymentsRef, where('santriId', '==', userId));
+        const querySnapshot = await getDocs(q);
+        
+        const period = timeline.periods[periodKey];
+        
+        if (querySnapshot.empty) {
+          return {
             id: `${userId}_${periodKey}`,
             santriId: userId,
             period: periodKey,
@@ -239,10 +231,37 @@ export const getUserDetailedPayments = async (userId) => {
             periodKey: periodKey,
             createdAt: new Date(),
             updatedAt: new Date()
-          });
+          };
+        } else {
+          const paymentData = querySnapshot.docs[0].data();
+          return {
+            id: querySnapshot.docs[0].id,
+            ...paymentData,
+            periodData: period,
+            periodKey: periodKey
+          };
         }
+      } catch (periodError) {
+        const period = timeline.periods[periodKey];
+        return {
+          id: `${userId}_${periodKey}`,
+          santriId: userId,
+          period: periodKey,
+          periodLabel: period.label,
+          amount: period.amount,
+          status: 'belum_bayar',
+          paymentDate: null,
+          paymentMethod: null,
+          notes: '',
+          periodData: period,
+          periodKey: periodKey,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
       }
-    }
+    });
+
+    const allPayments = await Promise.all(paymentPromises);
 
     allPayments.sort((a, b) => {
       const periodA = parseInt(a.periodKey.replace('period_', ''));
@@ -286,9 +305,8 @@ export const updateUserPaymentStatus = async (timelineId, periodKey, santriId, u
       await updateDoc(paymentRef, updatePayload);
     } catch (updateError) {
       if (updateError.code === 'not-found') {
-        const timelineResult = await getActiveTimeline();
-        if (timelineResult.success) {
-          const timeline = timelineResult.timeline;
+        const timeline = cachedTimeline || (await getActiveTimeline()).timeline;
+        if (timeline) {
           const period = timeline.periods[periodKey];
           
           if (period) {
@@ -314,10 +332,37 @@ export const updateUserPaymentStatus = async (timelineId, periodKey, santriId, u
       }
     }
 
+    cachedUsers = null;
+    cacheTimestamp = null;
+
     return { success: true };
   } catch (error) {
     console.error('Error updating user payment status:', error);
     return { success: false, error: error.message };
+  }
+};
+
+const getAllUsers = async () => {
+  try {
+    if (!db) {
+      return { success: true, users: [] };
+    }
+
+    const usersRef = collection(db, 'users');
+    const querySnapshot = await getDocs(usersRef);
+    
+    const users = [];
+    querySnapshot.forEach((doc) => {
+      users.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    return { success: true, users };
+  } catch (error) {
+    console.error('Error getting all users:', error);
+    return { success: false, error: error.message, users: [] };
   }
 };
 
@@ -332,4 +377,10 @@ const getLastPaymentDate = (payments) => {
   });
   
   return sortedPayments[0].paymentDate;
+};
+
+export const clearCache = () => {
+  cachedUsers = null;
+  cachedTimeline = null;
+  cacheTimestamp = null;
 };
