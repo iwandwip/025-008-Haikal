@@ -7,94 +7,63 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
   Alert,
+  ActivityIndicator,
+  Modal,
+  ScrollView,
 } from "react-native";
-import { useAuth } from "../../contexts/AuthContext";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
-import PaymentModal from "../../components/ui/PaymentModal";
 import {
-  getWaliPaymentHistory,
-  getPaymentSummary,
-  updateWaliPaymentStatus,
-} from "../../services/waliPaymentService";
+  getUserDetailedPayments,
+  updateUserPaymentStatus,
+} from "../../services/adminPaymentService";
+import Button from "../../components/ui/Button";
 
-function StatusPembayaran() {
-  const { userProfile } = useAuth();
+function UserPaymentDetail() {
   const { theme } = useSettings();
   const colors = getColors(theme);
-  const [refreshing, setRefreshing] = useState(false);
-  const [timeline, setTimeline] = useState(null);
+  const router = useRouter();
+  const { userId, userName, timelineId } = useLocalSearchParams();
+
   const [payments, setPayments] = useState([]);
-  const [summary, setSummary] = useState(null);
+  const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [renderingData, setRenderingData] = useState(false);
-  const [loadingText, setLoadingText] = useState("Memuat data pembayaran...");
-  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [summary, setSummary] = useState(null);
   const [selectedPayment, setSelectedPayment] = useState(null);
+  const [actionModalVisible, setActionModalVisible] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
   const loadData = async (isRefresh = false) => {
     try {
-      if (!userProfile?.id) {
-        setPayments([]);
-        setSummary(null);
-        setTimeline(null);
-        setLoading(false);
-        setRenderingData(false);
-        return;
-      }
+      if (!isRefresh) setLoading(true);
 
-      if (!isRefresh) {
-        setLoadingText("Mengambil timeline aktif...");
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-
-      setLoadingText("Memuat data pembayaran...");
-      const result = await getWaliPaymentHistory(userProfile.id);
+      const result = await getUserDetailedPayments(userId);
 
       if (result.success) {
-        if (!isRefresh) {
-          setLoadingText("Menyiapkan data...");
-          await new Promise((resolve) => setTimeout(resolve, 300));
-        }
-
-        setRenderingData(true);
-        setLoading(false);
-
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
         setPayments(result.payments);
         setTimeline(result.timeline);
-        setSummary(getPaymentSummary(result.payments));
-
-        if (!isRefresh) {
-          setLoadingText("Menyelesaikan...");
-          await new Promise((resolve) => setTimeout(resolve, 400));
-        }
-
-        setRenderingData(false);
+        setSummary(calculateSummary(result.payments));
       } else {
         setPayments([]);
-        setSummary(null);
         setTimeline(null);
-        setLoading(false);
-        setRenderingData(false);
+        setSummary(null);
       }
     } catch (error) {
-      console.error("Error loading payment data:", error);
+      console.error("Error loading user payment detail:", error);
       setPayments([]);
-      setSummary(null);
       setTimeline(null);
+      setSummary(null);
+    } finally {
       setLoading(false);
-      setRenderingData(false);
     }
   };
 
   useEffect(() => {
     loadData();
-  }, [userProfile]);
+  }, [userId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -102,32 +71,86 @@ function StatusPembayaran() {
     setRefreshing(false);
   };
 
-  const handlePayNow = (payment) => {
-    setSelectedPayment(payment);
-    setPaymentModalVisible(true);
+  const calculateSummary = (paymentList) => {
+    const total = paymentList.length;
+    const lunas = paymentList.filter((p) => p.status === "lunas").length;
+    const belumBayar = paymentList.filter(
+      (p) => p.status === "belum_bayar"
+    ).length;
+    const terlambat = paymentList.filter(
+      (p) => p.status === "terlambat"
+    ).length;
+
+    const totalAmount = paymentList.reduce(
+      (sum, p) => sum + (p.amount || 0),
+      0
+    );
+    const paidAmount = paymentList
+      .filter((p) => p.status === "lunas")
+      .reduce((sum, p) => sum + (p.amount || 0), 0);
+    const unpaidAmount = totalAmount - paidAmount;
+
+    const progressPercentage =
+      total > 0 ? Math.round((lunas / total) * 100) : 0;
+
+    return {
+      total,
+      lunas,
+      belumBayar,
+      terlambat,
+      totalAmount,
+      paidAmount,
+      unpaidAmount,
+      progressPercentage,
+    };
   };
 
-  const handlePaymentSuccess = async (payment, paymentMethod) => {
+  const handlePaymentPress = (payment) => {
+    setSelectedPayment(payment);
+    setActionModalVisible(true);
+  };
+
+  const handleUpdatePaymentStatus = async (newStatus, notes = "") => {
+    if (!selectedPayment || !timeline) return;
+
     setUpdatingPayment(true);
 
+    const updateData = {
+      status: newStatus,
+      updatedAt: new Date(),
+    };
+
+    if (newStatus === "lunas") {
+      updateData.paymentDate = new Date().toISOString();
+      updateData.paymentMethod = "tunai";
+      updateData.notes = notes || "Pembayaran dikonfirmasi oleh admin";
+    }
+
+    if (notes) {
+      updateData.notes = notes;
+    }
+
     try {
-      const result = await updateWaliPaymentStatus(
+      const result = await updateUserPaymentStatus(
         timeline.id,
-        payment.periodKey,
-        userProfile.id,
-        {
-          status: "lunas",
-          paymentDate: new Date().toISOString(),
-          paymentMethod: paymentMethod,
-          notes: `Pembayaran melalui ${paymentMethod}`,
-        }
+        selectedPayment.periodKey,
+        userId,
+        updateData
       );
 
       if (result.success) {
         await loadData(true);
         Alert.alert(
-          "Pembayaran Berhasil! 🎉",
-          `Pembayaran ${payment.periodData?.label} telah berhasil diproses.`,
+          "Berhasil!",
+          `Status pembayaran ${
+            selectedPayment.periodData?.label
+          } berhasil diperbarui menjadi ${
+            newStatus === "lunas"
+              ? "Lunas"
+              : newStatus === "belum_bayar"
+              ? "Belum Bayar"
+              : "Terlambat"
+          }.`,
           [{ text: "OK" }]
         );
       } else {
@@ -142,6 +165,8 @@ function StatusPembayaran() {
     }
 
     setUpdatingPayment(false);
+    setActionModalVisible(false);
+    setSelectedPayment(null);
   };
 
   const getStatusColor = (status) => {
@@ -201,84 +226,6 @@ function StatusPembayaran() {
     });
   };
 
-  const renderLoadingScreen = () => (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
-        {userProfile && (
-          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
-        )}
-      </View>
-
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingCard}>
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-            style={styles.loadingSpinner}
-          />
-          <Text style={[styles.loadingMainText, { color: colors.gray900 }]}>
-            {loadingText}
-          </Text>
-          <Text style={[styles.loadingSubText, { color: colors.gray600 }]}>
-            Mohon tunggu sebentar...
-          </Text>
-
-          <View style={styles.loadingProgress}>
-            <View
-              style={[styles.progressBar, { backgroundColor: colors.gray200 }]}
-            >
-              <View
-                style={[
-                  styles.progressFill,
-                  { backgroundColor: colors.primary },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-
-  const renderDataLoadingScreen = () => (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
-        {userProfile && (
-          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
-        )}
-        {timeline && (
-          <Text style={styles.timelineInfo}>Timeline: {timeline.name}</Text>
-        )}
-      </View>
-
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingCard}>
-          <ActivityIndicator
-            size="large"
-            color={colors.primary}
-            style={styles.loadingSpinner}
-          />
-          <Text style={[styles.loadingMainText, { color: colors.gray900 }]}>
-            Menyiapkan Data Pembayaran
-          </Text>
-          <Text style={[styles.loadingSubText, { color: colors.gray600 }]}>
-            Sedang memproses data pembayaran...
-          </Text>
-
-          <View style={styles.renderingProgress}>
-            <View style={styles.dotsContainer}>
-              <View style={[styles.dot, styles.dot1]} />
-              <View style={[styles.dot, styles.dot2]} />
-              <View style={[styles.dot, styles.dot3]} />
-            </View>
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-
   const renderSummaryCard = () => {
     if (!summary) return null;
 
@@ -290,7 +237,7 @@ function StatusPembayaran() {
         ]}
       >
         <Text style={[styles.summaryTitle, { color: colors.gray900 }]}>
-          Ringkasan Pembayaran
+          Ringkasan Pembayaran - {userName}
         </Text>
 
         <View style={styles.progressContainer}>
@@ -386,11 +333,13 @@ function StatusPembayaran() {
   };
 
   const renderPaymentItem = ({ item }) => (
-    <View
+    <TouchableOpacity
       style={[
         styles.paymentCard,
         { backgroundColor: colors.white, borderColor: colors.gray200 },
       ]}
+      onPress={() => handlePaymentPress(item)}
+      activeOpacity={0.7}
     >
       <View style={styles.cardHeader}>
         <View style={styles.periodInfo}>
@@ -461,49 +410,145 @@ function StatusPembayaran() {
         )}
       </View>
 
-      {item.status === "belum_bayar" && (
-        <TouchableOpacity
-          style={[styles.payButton, { backgroundColor: colors.primary }]}
-          onPress={() => handlePayNow(item)}
-          disabled={updatingPayment}
-        >
-          <Text style={[styles.payButtonText, { color: colors.white }]}>
-            💳 Bayar Sekarang
-          </Text>
-        </TouchableOpacity>
-      )}
+      <View style={styles.cardFooter}>
+        <Text style={[styles.tapHint, { color: colors.gray500 }]}>
+          Ketuk untuk ubah status
+        </Text>
+        <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
+      </View>
+    </TouchableOpacity>
+  );
 
-      {item.status === "terlambat" && (
-        <TouchableOpacity
-          style={[styles.payButton, { backgroundColor: colors.warning }]}
-          onPress={() => handlePayNow(item)}
-          disabled={updatingPayment}
-        >
-          <Text style={[styles.payButtonText, { color: colors.white }]}>
-            ⚡ Bayar Segera
-          </Text>
-        </TouchableOpacity>
-      )}
+  const renderActionModal = () => (
+    <Modal
+      visible={actionModalVisible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => !updatingPayment && setActionModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Ubah Status Pembayaran</Text>
+            {!updatingPayment && (
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setActionModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            {selectedPayment && (
+              <View style={styles.paymentInfo}>
+                <Text style={styles.paymentTitle}>
+                  {selectedPayment.periodData?.label}
+                </Text>
+                <Text style={styles.paymentAmount}>
+                  {formatCurrency(selectedPayment.amount)}
+                </Text>
+                <Text style={styles.currentStatus}>
+                  Status saat ini: {getStatusLabel(selectedPayment.status)}
+                </Text>
+              </View>
+            )}
+
+            {updatingPayment ? (
+              <View style={styles.loadingSection}>
+                <ActivityIndicator size="large" color={colors.primary} />
+                <Text style={styles.loadingText}>
+                  Memperbarui status pembayaran...
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.actionButtons}>
+                <Button
+                  title="✅ Tandai Lunas"
+                  onPress={() => handleUpdatePaymentStatus("lunas")}
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: colors.success },
+                  ]}
+                />
+
+                <Button
+                  title="❌ Tandai Belum Bayar"
+                  onPress={() => handleUpdatePaymentStatus("belum_bayar")}
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: colors.error },
+                  ]}
+                />
+
+                <Button
+                  title="⚠️ Tandai Terlambat"
+                  onPress={() => handleUpdatePaymentStatus("terlambat")}
+                  style={[
+                    styles.actionButton,
+                    { backgroundColor: colors.warning },
+                  ]}
+                />
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  const renderLoadingState = () => (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={colors.primary} />
+      <Text style={[styles.loadingText, { color: colors.gray600 }]}>
+        Memuat detail pembayaran...
+      </Text>
+    </View>
+  );
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyContainer}>
+      <Text style={[styles.emptyIcon, { color: colors.gray400 }]}>📊</Text>
+      <Text style={[styles.emptyText, { color: colors.gray600 }]}>
+        Belum ada data pembayaran
+      </Text>
+      <Text style={[styles.emptySubtext, { color: colors.gray500 }]}>
+        Data pembayaran akan muncul setelah timeline dibuat
+      </Text>
     </View>
   );
 
   const styles = createStyles(colors);
 
   if (loading) {
-    return renderLoadingScreen();
-  }
-
-  if (renderingData) {
-    return renderDataLoadingScreen();
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>← Kembali</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Detail Pembayaran</Text>
+        </View>
+        {renderLoadingState()}
+      </SafeAreaView>
+    );
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
-        {userProfile && (
-          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
-        )}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+        >
+          <Text style={styles.backButtonText}>← Kembali</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Detail Pembayaran</Text>
+        <Text style={styles.subtitle}>{userName}</Text>
         {timeline && (
           <Text style={styles.timelineInfo}>Timeline: {timeline.name}</Text>
         )}
@@ -512,7 +557,7 @@ function StatusPembayaran() {
       {payments.length > 0 ? (
         <FlatList
           data={[{ type: "summary" }, ...payments]}
-          renderItem={({ item, index }) => {
+          renderItem={({ item }) => {
             if (item.type === "summary") {
               return renderSummaryCard();
             }
@@ -533,49 +578,12 @@ function StatusPembayaran() {
               titleColor={colors.gray600}
             />
           }
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
-          windowSize={10}
-          removeClippedSubviews={true}
-          getItemLayout={(data, index) => ({
-            length: index === 0 ? 250 : 180,
-            offset: index === 0 ? 0 : 250 + (index - 1) * 180,
-            index,
-          })}
         />
       ) : (
-        <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyIcon, { color: colors.gray400 }]}>📊</Text>
-          <Text style={[styles.emptyText, { color: colors.gray600 }]}>
-            {timeline
-              ? "Belum ada data pembayaran"
-              : "Belum ada timeline aktif"}
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.gray500 }]}>
-            {timeline
-              ? "Data pembayaran akan muncul setelah admin membuat timeline"
-              : "Admin belum membuat timeline pembayaran"}
-          </Text>
-        </View>
+        renderEmptyState()
       )}
 
-      <PaymentModal
-        visible={paymentModalVisible}
-        payment={selectedPayment}
-        onClose={() => setPaymentModalVisible(false)}
-        onPaymentSuccess={handlePaymentSuccess}
-      />
-
-      {updatingPayment && (
-        <View style={styles.updateOverlay}>
-          <View style={styles.updateModal}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.updateText}>
-              Memperbarui status pembayaran...
-            </Text>
-          </View>
-        </View>
-      )}
+      {renderActionModal()}
     </SafeAreaView>
   );
 }
@@ -593,6 +601,15 @@ const createStyles = (colors) =>
       borderBottomColor: colors.gray200,
       backgroundColor: colors.white,
     },
+    backButton: {
+      alignSelf: "flex-start",
+      marginBottom: 12,
+    },
+    backButtonText: {
+      fontSize: 16,
+      color: colors.primary,
+      fontWeight: "500",
+    },
     title: {
       fontSize: 20,
       fontWeight: "600",
@@ -601,9 +618,10 @@ const createStyles = (colors) =>
       marginBottom: 4,
     },
     subtitle: {
-      fontSize: 14,
-      color: colors.gray600,
+      fontSize: 16,
+      color: colors.gray700,
       textAlign: "center",
+      fontWeight: "500",
     },
     timelineInfo: {
       fontSize: 12,
@@ -611,78 +629,6 @@ const createStyles = (colors) =>
       textAlign: "center",
       marginTop: 4,
       fontWeight: "500",
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    loadingCard: {
-      backgroundColor: colors.white,
-      borderRadius: 20,
-      padding: 40,
-      alignItems: "center",
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.15,
-      shadowRadius: 20,
-      elevation: 10,
-      borderWidth: 1,
-      borderColor: colors.gray200,
-      minWidth: 300,
-    },
-    loadingSpinner: {
-      marginBottom: 20,
-    },
-    loadingMainText: {
-      fontSize: 18,
-      fontWeight: "600",
-      textAlign: "center",
-      marginBottom: 8,
-    },
-    loadingSubText: {
-      fontSize: 14,
-      textAlign: "center",
-      marginBottom: 24,
-    },
-    loadingProgress: {
-      width: "100%",
-    },
-    progressBar: {
-      height: 8,
-      borderRadius: 4,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: 4,
-      width: "70%",
-    },
-    renderingProgress: {
-      marginTop: 10,
-      alignItems: "center",
-    },
-    dotsContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: colors.primary,
-      marginHorizontal: 4,
-    },
-    dot1: {
-      opacity: 1,
-    },
-    dot2: {
-      opacity: 0.7,
-    },
-    dot3: {
-      opacity: 0.4,
     },
     listContent: {
       padding: 24,
@@ -720,6 +666,15 @@ const createStyles = (colors) =>
     progressPercentage: {
       fontSize: 16,
       fontWeight: "700",
+    },
+    progressBar: {
+      height: 8,
+      borderRadius: 4,
+      overflow: "hidden",
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 4,
     },
     summaryStats: {
       marginBottom: 16,
@@ -824,17 +779,107 @@ const createStyles = (colors) =>
       flex: 1.5,
       textAlign: "right",
     },
-    payButton: {
-      paddingVertical: 12,
-      borderRadius: 8,
-      alignItems: "center",
+    cardFooter: {
       flexDirection: "row",
-      justifyContent: "center",
-      gap: 8,
+      justifyContent: "space-between",
+      alignItems: "center",
+      borderTopWidth: 1,
+      borderTopColor: colors.gray200,
+      paddingTop: 12,
     },
-    payButtonText: {
-      fontSize: 14,
+    tapHint: {
+      fontSize: 12,
+      fontStyle: "italic",
+    },
+    arrowText: {
+      fontSize: 16,
       fontWeight: "600",
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    modalContainer: {
+      backgroundColor: colors.white,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: "70%",
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 24,
+      paddingVertical: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.gray200,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: colors.gray900,
+    },
+    closeButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: colors.gray100,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    closeButtonText: {
+      fontSize: 16,
+      color: colors.gray600,
+      fontWeight: "600",
+    },
+    modalContent: {
+      paddingHorizontal: 24,
+    },
+    paymentInfo: {
+      backgroundColor: colors.primary + "10",
+      padding: 20,
+      borderRadius: 12,
+      alignItems: "center",
+      marginVertical: 20,
+    },
+    paymentTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.gray900,
+      marginBottom: 8,
+    },
+    paymentAmount: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: colors.primary,
+      marginBottom: 8,
+    },
+    currentStatus: {
+      fontSize: 14,
+      color: colors.gray600,
+    },
+    actionButtons: {
+      paddingBottom: 30,
+      gap: 12,
+    },
+    actionButton: {
+      marginBottom: 0,
+    },
+    loadingSection: {
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    loadingText: {
+      fontSize: 16,
+      marginTop: 16,
+      textAlign: "center",
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
     },
     emptyContainer: {
       flex: 1,
@@ -857,29 +902,6 @@ const createStyles = (colors) =>
       textAlign: "center",
       lineHeight: 20,
     },
-    updateOverlay: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    updateModal: {
-      backgroundColor: colors.white,
-      borderRadius: 16,
-      padding: 32,
-      alignItems: "center",
-      minWidth: 200,
-    },
-    updateText: {
-      fontSize: 16,
-      color: colors.gray900,
-      marginTop: 16,
-      textAlign: "center",
-    },
   });
 
-export default StatusPembayaran;
+export default UserPaymentDetail;

@@ -2,7 +2,10 @@ import {
   collection, 
   getDocs, 
   query, 
-  where 
+  where,
+  doc,
+  updateDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getActiveTimeline } from './timelineService';
@@ -104,6 +107,70 @@ export const getWaliPaymentHistory = async (santriId) => {
   } catch (error) {
     console.error('Error getting wali payment history:', error);
     return { success: false, error: error.message, payments: [], timeline: null };
+  }
+};
+
+export const updateWaliPaymentStatus = async (timelineId, periodKey, santriId, updateData) => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    if (!timelineId || !periodKey || !santriId) {
+      throw new Error('Parameter tidak lengkap untuk update payment');
+    }
+
+    const paymentRef = doc(
+      db, 
+      'payments', 
+      timelineId, 
+      'periods', 
+      periodKey, 
+      'santri_payments', 
+      santriId
+    );
+
+    const updatePayload = {
+      ...updateData,
+      updatedAt: new Date()
+    };
+
+    try {
+      await updateDoc(paymentRef, updatePayload);
+    } catch (updateError) {
+      if (updateError.code === 'not-found') {
+        const timelineResult = await getActiveTimeline();
+        if (timelineResult.success) {
+          const timeline = timelineResult.timeline;
+          const period = timeline.periods[periodKey];
+          
+          if (period) {
+            const newPaymentData = {
+              id: `${santriId}_${periodKey}`,
+              santriId: santriId,
+              period: periodKey,
+              periodLabel: period.label,
+              amount: period.amount,
+              ...updatePayload,
+              createdAt: new Date()
+            };
+
+            await setDoc(paymentRef, newPaymentData);
+          } else {
+            throw new Error('Period tidak ditemukan dalam timeline');
+          }
+        } else {
+          throw new Error('Timeline aktif tidak ditemukan');
+        }
+      } else {
+        throw updateError;
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating wali payment status:', error);
+    return { success: false, error: error.message };
   }
 };
 

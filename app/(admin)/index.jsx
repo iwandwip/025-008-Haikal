@@ -50,7 +50,7 @@ function AdminHome() {
   };
 
   const handleCekPembayaran = () => {
-    Alert.alert("Info", "Fitur ini akan segera tersedia");
+    router.push("/(admin)/payment-status");
   };
 
   return (
