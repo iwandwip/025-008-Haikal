@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,7 +21,7 @@ import { getColors } from "../../constants/Colors";
 
 export default function EditProfile() {
   const { userProfile, refreshProfile } = useAuth();
-  const { theme } = useSettings();
+  const { theme, loading: settingsLoading } = useSettings();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = getColors(theme);
@@ -89,22 +90,76 @@ export default function EditProfile() {
     setLoading(false);
   };
 
-  const styles = createStyles(colors);
-
-  return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardContainer}
+  if (settingsLoading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          { paddingTop: insets.top, backgroundColor: colors.background },
+        ]}
       >
-        <View style={styles.header}>
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.white,
+              borderBottomColor: colors.gray200,
+            },
+          ]}
+        >
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>← Kembali</Text>
+            <Text style={[styles.backButtonText, { color: colors.primary }]}>
+              ← Kembali
+            </Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Profil</Text>
+          <Text style={[styles.headerTitle, { color: colors.gray900 }]}>
+            Edit Profil
+          </Text>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.gray600 }]}>
+            Memuat profil...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top, backgroundColor: colors.background },
+      ]}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardContainer}
+      >
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.white,
+              borderBottomColor: colors.gray200,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={[styles.backButtonText, { color: colors.primary }]}>
+              ← Kembali
+            </Text>
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.gray900 }]}>
+            Edit Profil
+          </Text>
         </View>
 
         <ScrollView
@@ -113,7 +168,14 @@ export default function EditProfile() {
         >
           <View style={styles.content}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Informasi Wali Santri</Text>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.gray900, borderBottomColor: colors.primary },
+                ]}
+              >
+                Informasi Wali Santri
+              </Text>
 
               <Input
                 label="Nama Wali"
@@ -135,7 +197,14 @@ export default function EditProfile() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Informasi Santri</Text>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { color: colors.gray900, borderBottomColor: colors.primary },
+                ]}
+              >
+                Informasi Santri
+              </Text>
 
               <Input
                 label="Nama Santri"
@@ -146,8 +215,13 @@ export default function EditProfile() {
                 error={errors.namaSantri}
               />
 
-              <View style={styles.infoBox}>
-                <Text style={styles.infoText}>
+              <View
+                style={[
+                  styles.infoBox,
+                  { backgroundColor: colors.primary + "20" },
+                ]}
+              >
+                <Text style={[styles.infoText, { color: colors.primary }]}>
                   ℹ️ RFID santri hanya dapat diatur oleh admin TPQ
                 </Text>
               </View>
@@ -158,7 +232,7 @@ export default function EditProfile() {
                 title="Batal"
                 onPress={() => router.back()}
                 variant="outline"
-                style={styles.cancelButton}
+                style={[styles.cancelButton, { borderColor: colors.gray400 }]}
                 disabled={loading}
               />
 
@@ -166,7 +240,7 @@ export default function EditProfile() {
                 title={loading ? "Menyimpan..." : "Simpan Perubahan"}
                 onPress={handleSave}
                 disabled={loading}
-                style={styles.saveButton}
+                style={[styles.saveButton, { backgroundColor: colors.success }]}
               />
             </View>
           </View>
@@ -176,79 +250,78 @@ export default function EditProfile() {
   );
 }
 
-const createStyles = (colors) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    keyboardContainer: {
-      flex: 1,
-    },
-    header: {
-      paddingHorizontal: 24,
-      paddingVertical: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.gray200,
-      backgroundColor: colors.white,
-    },
-    backButton: {
-      alignSelf: "flex-start",
-      marginBottom: 8,
-    },
-    backButtonText: {
-      fontSize: 16,
-      color: colors.primary,
-      fontWeight: "500",
-    },
-    headerTitle: {
-      fontSize: 20,
-      fontWeight: "600",
-      color: colors.gray900,
-      textAlign: "center",
-    },
-    scrollView: {
-      flex: 1,
-    },
-    content: {
-      paddingHorizontal: 24,
-      paddingVertical: 24,
-    },
-    section: {
-      marginBottom: 32,
-    },
-    sectionTitle: {
-      fontSize: 18,
-      fontWeight: "600",
-      color: colors.gray900,
-      marginBottom: 16,
-      paddingBottom: 8,
-      borderBottomWidth: 2,
-      borderBottomColor: colors.primary,
-    },
-    infoBox: {
-      backgroundColor: colors.primary + "20",
-      padding: 12,
-      borderRadius: 8,
-      marginTop: 8,
-    },
-    infoText: {
-      fontSize: 14,
-      color: colors.primary,
-      lineHeight: 20,
-    },
-    buttonSection: {
-      flexDirection: "row",
-      gap: 12,
-      marginTop: 16,
-      marginBottom: 32,
-    },
-    cancelButton: {
-      flex: 1,
-      borderColor: colors.gray400,
-    },
-    saveButton: {
-      flex: 1,
-      backgroundColor: colors.success,
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 16,
+    paddingBottom: 8,
+    borderBottomWidth: 2,
+  },
+  infoBox: {
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  buttonSection: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 32,
+  },
+  cancelButton: {
+    flex: 1,
+  },
+  saveButton: {
+    flex: 1,
+  },
+});

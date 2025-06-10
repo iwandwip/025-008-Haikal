@@ -6,7 +6,11 @@ const SettingsContext = createContext();
 export const useSettings = () => {
   const context = useContext(SettingsContext);
   if (!context) {
-    throw new Error("useSettings must be used within a SettingsProvider");
+    return {
+      theme: "light",
+      loading: false,
+      changeTheme: () => {},
+    };
   }
   return context;
 };
@@ -18,9 +22,12 @@ export const SettingsProvider = ({ children }) => {
   const loadSettings = async () => {
     try {
       const savedTheme = await AsyncStorage.getItem("app_theme");
-      if (savedTheme) setTheme(savedTheme);
+      if (savedTheme && (savedTheme === "light" || savedTheme === "dark")) {
+        setTheme(savedTheme);
+      }
     } catch (error) {
       console.error("Error loading settings:", error);
+      setTheme("light");
     } finally {
       setLoading(false);
     }
@@ -28,8 +35,10 @@ export const SettingsProvider = ({ children }) => {
 
   const changeTheme = async (newTheme) => {
     try {
-      setTheme(newTheme);
-      await AsyncStorage.setItem("app_theme", newTheme);
+      if (newTheme === "light" || newTheme === "dark") {
+        setTheme(newTheme);
+        await AsyncStorage.setItem("app_theme", newTheme);
+      }
     } catch (error) {
       console.error("Error saving theme:", error);
     }
@@ -40,7 +49,7 @@ export const SettingsProvider = ({ children }) => {
   }, []);
 
   const value = {
-    theme,
+    theme: theme || "light",
     loading,
     changeTheme,
   };

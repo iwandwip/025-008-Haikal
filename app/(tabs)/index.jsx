@@ -22,7 +22,7 @@ import {
 
 function StatusPembayaran() {
   const { userProfile } = useAuth();
-  const { theme } = useSettings();
+  const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
   const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState(null);
@@ -70,8 +70,10 @@ function StatusPembayaran() {
   );
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!settingsLoading) {
+      loadData();
+    }
+  }, [loadData, settingsLoading]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -426,15 +428,25 @@ function StatusPembayaran() {
     [renderSummaryCard, renderPaymentItem]
   );
 
-  const styles = createStyles(colors);
-
-  if (loading) {
+  if (settingsLoading || loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.background }]}
+      >
+        <View
+          style={[
+            styles.header,
+            {
+              backgroundColor: colors.white,
+              borderBottomColor: colors.gray200,
+            },
+          ]}
+        >
+          <Text style={[styles.title, { color: colors.gray900 }]}>
+            Status Pembayaran Bisyaroh
+          </Text>
           {userProfile && (
-            <Text style={styles.subtitle}>
+            <Text style={[styles.subtitle, { color: colors.gray600 }]}>
               Santri: {userProfile.namaSantri}
             </Text>
           )}
@@ -451,14 +463,27 @@ function StatusPembayaran() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <View
+        style={[
+          styles.header,
+          { backgroundColor: colors.white, borderBottomColor: colors.gray200 },
+        ]}
+      >
+        <Text style={[styles.title, { color: colors.gray900 }]}>
+          Status Pembayaran Bisyaroh
+        </Text>
         {userProfile && (
-          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
+          <Text style={[styles.subtitle, { color: colors.gray600 }]}>
+            Santri: {userProfile.namaSantri}
+          </Text>
         )}
         {timeline && (
-          <Text style={styles.timelineInfo}>Timeline: {timeline.name}</Text>
+          <Text style={[styles.timelineInfo, { color: colors.primary }]}>
+            Timeline: {timeline.name}
+          </Text>
         )}
       </View>
 
@@ -513,10 +538,15 @@ function StatusPembayaran() {
       />
 
       {updatingPayment && (
-        <View style={styles.updateOverlay}>
-          <View style={styles.updateModal}>
+        <View
+          style={[
+            styles.updateOverlay,
+            { backgroundColor: "rgba(0, 0, 0, 0.7)" },
+          ]}
+        >
+          <View style={[styles.updateModal, { backgroundColor: colors.white }]}>
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={styles.updateText}>
+            <Text style={[styles.updateText, { color: colors.gray900 }]}>
               Memperbarui status pembayaran...
             </Text>
           </View>
@@ -526,254 +556,243 @@ function StatusPembayaran() {
   );
 }
 
-const createStyles = (colors) =>
-  StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      paddingHorizontal: 24,
-      paddingVertical: 20,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.gray200,
-      backgroundColor: colors.white,
-    },
-    title: {
-      fontSize: 20,
-      fontWeight: "600",
-      color: colors.gray900,
-      textAlign: "center",
-      marginBottom: 4,
-    },
-    subtitle: {
-      fontSize: 14,
-      color: colors.gray600,
-      textAlign: "center",
-    },
-    timelineInfo: {
-      fontSize: 12,
-      color: colors.primary,
-      textAlign: "center",
-      marginTop: 4,
-      fontWeight: "500",
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    loadingText: {
-      fontSize: 16,
-      marginTop: 16,
-      textAlign: "center",
-    },
-    listContent: {
-      padding: 24,
-    },
-    summaryCard: {
-      borderRadius: 16,
-      padding: 20,
-      marginBottom: 24,
-      borderWidth: 1,
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
-      elevation: 5,
-    },
-    summaryTitle: {
-      fontSize: 18,
-      fontWeight: "700",
-      textAlign: "center",
-      marginBottom: 20,
-    },
-    progressContainer: {
-      marginBottom: 20,
-    },
-    progressHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 8,
-    },
-    progressText: {
-      fontSize: 14,
-      fontWeight: "500",
-    },
-    progressPercentage: {
-      fontSize: 16,
-      fontWeight: "700",
-    },
-    progressBar: {
-      height: 8,
-      borderRadius: 4,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: 4,
-    },
-    summaryStats: {
-      marginBottom: 16,
-    },
-    statRow: {
-      flexDirection: "row",
-      justifyContent: "space-around",
-      marginBottom: 20,
-    },
-    statItem: {
-      alignItems: "center",
-    },
-    statNumber: {
-      fontSize: 24,
-      fontWeight: "bold",
-      marginBottom: 4,
-    },
-    statLabel: {
-      fontSize: 12,
-      fontWeight: "500",
-    },
-    amountSummary: {
-      borderTopWidth: 1,
-      borderTopColor: colors.gray200,
-      paddingTop: 16,
-    },
-    amountRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 8,
-    },
-    amountLabel: {
-      fontSize: 14,
-      fontWeight: "500",
-    },
-    amountValue: {
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    paymentCard: {
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 16,
-      borderWidth: 1,
-      shadowColor: colors.shadow.color,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    cardHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-      marginBottom: 12,
-    },
-    periodInfo: {
-      flex: 1,
-    },
-    periodText: {
-      fontSize: 16,
-      fontWeight: "600",
-      marginBottom: 2,
-    },
-    periodNumber: {
-      fontSize: 12,
-      fontWeight: "500",
-    },
-    statusBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 20,
-      gap: 6,
-    },
-    statusIcon: {
-      fontSize: 14,
-    },
-    statusText: {
-      fontSize: 12,
-      fontWeight: "600",
-    },
-    cardContent: {
-      marginBottom: 12,
-    },
-    infoRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 8,
-    },
-    labelText: {
-      fontSize: 14,
-      fontWeight: "500",
-      flex: 1,
-    },
-    valueText: {
-      fontSize: 14,
-      fontWeight: "600",
-      flex: 1.5,
-      textAlign: "right",
-    },
-    payButton: {
-      paddingVertical: 12,
-      borderRadius: 8,
-      alignItems: "center",
-      flexDirection: "row",
-      justifyContent: "center",
-      gap: 8,
-    },
-    payButtonText: {
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    emptyContainer: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-      paddingHorizontal: 24,
-    },
-    emptyIcon: {
-      fontSize: 64,
-      marginBottom: 16,
-    },
-    emptyText: {
-      fontSize: 18,
-      fontWeight: "600",
-      marginBottom: 8,
-      textAlign: "center",
-    },
-    emptySubtext: {
-      fontSize: 14,
-      textAlign: "center",
-      lineHeight: 20,
-    },
-    updateOverlay: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(0, 0, 0, 0.7)",
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    updateModal: {
-      backgroundColor: colors.white,
-      borderRadius: 16,
-      padding: 32,
-      alignItems: "center",
-      minWidth: 200,
-    },
-    updateText: {
-      fontSize: 16,
-      color: colors.gray900,
-      marginTop: 16,
-      textAlign: "center",
-    },
-  });
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+    textAlign: "center",
+  },
+  timelineInfo: {
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  loadingText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  listContent: {
+    padding: 24,
+  },
+  summaryCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  summaryTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  progressContainer: {
+    marginBottom: 20,
+  },
+  progressHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  progressPercentage: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  summaryStats: {
+    marginBottom: 16,
+  },
+  statRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 20,
+  },
+  statItem: {
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  amountSummary: {
+    borderTopWidth: 1,
+    paddingTop: 16,
+  },
+  amountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  amountLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  amountValue: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  paymentCard: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  periodInfo: {
+    flex: 1,
+  },
+  periodText: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  periodNumber: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  statusIcon: {
+    fontSize: 14,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  cardContent: {
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  labelText: {
+    fontSize: 14,
+    fontWeight: "500",
+    flex: 1,
+  },
+  valueText: {
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1.5,
+    textAlign: "right",
+  },
+  payButton: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  payButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  updateOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  updateModal: {
+    borderRadius: 16,
+    padding: 32,
+    alignItems: "center",
+    minWidth: 200,
+  },
+  updateText: {
+    fontSize: 16,
+    marginTop: 16,
+    textAlign: "center",
+  },
+});
 
 export default StatusPembayaran;

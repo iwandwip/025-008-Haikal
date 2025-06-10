@@ -1,12 +1,27 @@
 import React from "react";
-import { Text } from "react-native";
+import { Text, ActivityIndicator, View } from "react-native";
 import { Tabs } from "expo-router";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
 
 export default function TabsLayout() {
-  const { theme } = useSettings();
+  const { theme, loading } = useSettings();
   const colors = getColors(theme);
+
+  if (loading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: colors.background,
+        }}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <Tabs

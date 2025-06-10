@@ -58,7 +58,10 @@ export const darkTheme = {
   },
 };
 
-export const getColors = (theme = 'light') => {
+export const getColors = (theme) => {
+  if (!theme || typeof theme !== 'string') {
+    return lightTheme;
+  }
   return theme === 'dark' ? darkTheme : lightTheme;
 };
 
