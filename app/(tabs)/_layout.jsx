@@ -2,12 +2,10 @@ import React from "react";
 import { Text } from "react-native";
 import { Tabs } from "expo-router";
 import { useSettings } from "../../contexts/SettingsContext";
-import { useTranslation } from "../../hooks/useTranslation";
 import { getColors } from "../../constants/Colors";
 
 export default function TabsLayout() {
   const { theme } = useSettings();
-  const { t } = useTranslation();
   const colors = getColors(theme);
 
   return (
@@ -25,37 +23,37 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: t("common.home"),
+          title: "Status Pembayaran",
           tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}>🏠</Text>
+            <Text style={{ color, fontSize: size }}>💰</Text>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: "Profil",
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>👤</Text>
           ),
         }}
       />
       <Tabs.Screen
         name="table"
         options={{
-          title: t("common.table"),
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}>📊</Text>
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
         name="graphics"
         options={{
-          title: t("common.graphics"),
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}>📈</Text>
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: t("common.settings"),
-          tabBarIcon: ({ color, size }) => (
-            <Text style={{ color, fontSize: size }}>⚙️</Text>
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen

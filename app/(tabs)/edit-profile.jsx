@@ -5,30 +5,31 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
-  StatusBar,
-  TouchableWithoutFeedback,
-  Keyboard,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { useAuth } from "../../contexts/AuthContext";
+import { useSettings } from "../../contexts/SettingsContext";
 import Input from "../../components/ui/Input";
-import DatePicker from "../../components/ui/DatePicker";
 import Button from "../../components/ui/Button";
 import { updateUserProfile } from "../../services/userService";
-import { Colors } from "../../constants/Colors";
+import { getColors } from "../../constants/Colors";
 
 export default function EditProfile() {
   const { userProfile, refreshProfile } = useAuth();
+  const { theme } = useSettings();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = getColors(theme);
 
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    name: userProfile?.name || "",
-    birthdate: userProfile?.birthdate || "",
-    gender: userProfile?.gender || "",
+    namaWali: userProfile?.namaWali || "",
+    noHpWali: userProfile?.noHpWali || "",
+    namaSantri: userProfile?.namaSantri || "",
   });
   const [errors, setErrors] = useState({});
 
@@ -42,16 +43,16 @@ export default function EditProfile() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.name.trim()) {
-      newErrors.name = "Name is required";
+    if (!formData.namaWali.trim()) {
+      newErrors.namaWali = "Nama wali wajib diisi";
     }
 
-    if (!formData.birthdate) {
-      newErrors.birthdate = "Birth date is required";
+    if (!formData.noHpWali.trim()) {
+      newErrors.noHpWali = "No HP wali wajib diisi";
     }
 
-    if (!formData.gender) {
-      newErrors.gender = "Gender is required";
+    if (!formData.namaSantri.trim()) {
+      newErrors.namaSantri = "Nama santri wajib diisi";
     }
 
     setErrors(newErrors);
@@ -69,8 +70,8 @@ export default function EditProfile() {
       if (result.success) {
         await refreshProfile();
         Alert.alert(
-          "Profile Updated",
-          "Your profile has been updated successfully!",
+          "Profil Berhasil Diperbarui",
+          "Perubahan profil telah disimpan!",
           [
             {
               text: "OK",
@@ -79,172 +80,175 @@ export default function EditProfile() {
           ]
         );
       } else {
-        Alert.alert("Update Failed", result.error);
+        Alert.alert("Gagal Memperbarui", result.error);
       }
     } catch (error) {
-      Alert.alert("Update Failed", "Something went wrong. Please try again.");
+      Alert.alert("Gagal Memperbarui", "Terjadi kesalahan. Silakan coba lagi.");
     }
 
     setLoading(false);
   };
 
-  const getDateLimits = () => {
-    const today = new Date();
-    const maxDate = new Date();
-    maxDate.setFullYear(today.getFullYear() - 3);
-
-    const minDate = new Date();
-    minDate.setFullYear(today.getFullYear() - 100);
-
-    return { maxDate, minDate };
-  };
-
-  const { maxDate, minDate } = getDateLimits();
+  const styles = createStyles(colors);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardContainer}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>← Kembali</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Edit Profil</Text>
+        </View>
 
-      <View style={styles.header}>
-        <Text style={styles.title}>Edit Profile</Text>
-      </View>
-
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <KeyboardAwareScrollView
-          style={styles.scrollContainer}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
+        <ScrollView
+          style={styles.scrollView}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          enableOnAndroid={true}
-          enableAutomaticScroll={true}
-          extraScrollHeight={20}
-          bounces={false}
         >
-          <View style={styles.formContainer}>
-            <Input
-              label="Name"
-              placeholder="Enter your name"
-              value={formData.name}
-              onChangeText={(value) => updateFormData("name", value)}
-              autoCapitalize="words"
-              error={errors.name}
-            />
+          <View style={styles.content}>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Informasi Wali Santri</Text>
 
-            <DatePicker
-              label="Birth Date"
-              placeholder="Select birth date"
-              value={formData.birthdate}
-              onChange={(value) => updateFormData("birthdate", value)}
-              maximumDate={maxDate}
-              minimumDate={minDate}
-              error={errors.birthdate}
-            />
+              <Input
+                label="Nama Wali"
+                placeholder="Masukkan nama lengkap wali"
+                value={formData.namaWali}
+                onChangeText={(value) => updateFormData("namaWali", value)}
+                autoCapitalize="words"
+                error={errors.namaWali}
+              />
 
-            <View style={styles.genderContainer}>
-              <Text style={styles.genderLabel}>Gender</Text>
-              <View style={styles.genderButtons}>
-                <Button
-                  title="Male"
-                  onPress={() => updateFormData("gender", "male")}
-                  variant={formData.gender === "male" ? "primary" : "outline"}
-                  style={styles.genderButton}
-                />
-                <Button
-                  title="Female"
-                  onPress={() => updateFormData("gender", "female")}
-                  variant={formData.gender === "female" ? "primary" : "outline"}
-                  style={styles.genderButton}
-                />
+              <Input
+                label="No HP Wali"
+                placeholder="Masukkan nomor HP wali"
+                value={formData.noHpWali}
+                onChangeText={(value) => updateFormData("noHpWali", value)}
+                keyboardType="phone-pad"
+                error={errors.noHpWali}
+              />
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Informasi Santri</Text>
+
+              <Input
+                label="Nama Santri"
+                placeholder="Masukkan nama lengkap santri"
+                value={formData.namaSantri}
+                onChangeText={(value) => updateFormData("namaSantri", value)}
+                autoCapitalize="words"
+                error={errors.namaSantri}
+              />
+
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  ℹ️ RFID santri hanya dapat diatur oleh admin TPQ
+                </Text>
               </View>
-              {errors.gender && (
-                <Text style={styles.errorText}>{errors.gender}</Text>
-              )}
+            </View>
+
+            <View style={styles.buttonSection}>
+              <Button
+                title="Batal"
+                onPress={() => router.back()}
+                variant="outline"
+                style={styles.cancelButton}
+                disabled={loading}
+              />
+
+              <Button
+                title={loading ? "Menyimpan..." : "Simpan Perubahan"}
+                onPress={handleSave}
+                disabled={loading}
+                style={styles.saveButton}
+              />
             </View>
           </View>
-
-          <View style={styles.buttonContainer}>
-            <Button
-              title="Cancel"
-              onPress={() => router.back()}
-              variant="outline"
-              style={styles.cancelButton}
-              disabled={loading}
-            />
-
-            <Button
-              title={loading ? "Saving..." : "Save Changes"}
-              onPress={handleSave}
-              style={styles.saveButton}
-              disabled={loading}
-            />
-          </View>
-        </KeyboardAwareScrollView>
-      </TouchableWithoutFeedback>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.gray200,
-    backgroundColor: Colors.white,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: Colors.gray900,
-    textAlign: "center",
-  },
-  scrollContainer: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-  },
-  formContainer: {
-    flex: 1,
-  },
-  genderContainer: {
-    marginBottom: 16,
-  },
-  genderLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.gray700,
-    marginBottom: 8,
-  },
-  genderButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  genderButton: {
-    flex: 1,
-  },
-  errorText: {
-    fontSize: 12,
-    color: Colors.error,
-    marginTop: 4,
-  },
-  buttonContainer: {
-    marginTop: 32,
-    gap: 12,
-  },
-  cancelButton: {
-    marginBottom: 8,
-  },
-  saveButton: {
-    marginBottom: 8,
-  },
-});
+const createStyles = (colors) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    keyboardContainer: {
+      flex: 1,
+    },
+    header: {
+      paddingHorizontal: 24,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.gray200,
+      backgroundColor: colors.white,
+    },
+    backButton: {
+      alignSelf: "flex-start",
+      marginBottom: 8,
+    },
+    backButtonText: {
+      fontSize: 16,
+      color: colors.primary,
+      fontWeight: "500",
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: colors.gray900,
+      textAlign: "center",
+    },
+    scrollView: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: 24,
+      paddingVertical: 24,
+    },
+    section: {
+      marginBottom: 32,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.gray900,
+      marginBottom: 16,
+      paddingBottom: 8,
+      borderBottomWidth: 2,
+      borderBottomColor: colors.primary,
+    },
+    infoBox: {
+      backgroundColor: colors.primary + "20",
+      padding: 12,
+      borderRadius: 8,
+      marginTop: 8,
+    },
+    infoText: {
+      fontSize: 14,
+      color: colors.primary,
+      lineHeight: 20,
+    },
+    buttonSection: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 16,
+      marginBottom: 32,
+    },
+    cancelButton: {
+      flex: 1,
+      borderColor: colors.gray400,
+    },
+    saveButton: {
+      flex: 1,
+      backgroundColor: colors.success,
+    },
+  });
