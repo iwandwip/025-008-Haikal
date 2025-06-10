@@ -39,24 +39,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="table"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="graphics"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
         name="edit-profile"
         options={{
           href: null,
