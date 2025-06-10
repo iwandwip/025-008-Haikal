@@ -11,13 +11,16 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Button from "../../components/ui/Button";
+import DatePicker from "../../components/ui/DatePicker";
 import LoadingSpinner from "../../components/ui/LoadingSpinner";
 import {
   getActiveTimeline,
   getTimelineTemplates,
   resetTimelinePayments,
   deleteActiveTimeline,
+  updateTimelineSimulationDate,
 } from "../../services/timelineService";
+import { bulkUpdatePaymentStatus } from "../../services/adminPaymentService";
 
 export default function TimelineManager() {
   const [activeTimeline, setActiveTimeline] = useState(null);
@@ -25,6 +28,10 @@ export default function TimelineManager() {
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [simulationDate, setSimulationDate] = useState(
+    new Date().toISOString().split("T")[0]
+  );
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -38,6 +45,9 @@ export default function TimelineManager() {
 
     if (timelineResult.success) {
       setActiveTimeline(timelineResult.timeline);
+      if (timelineResult.timeline.simulationDate) {
+        setSimulationDate(timelineResult.timeline.simulationDate);
+      }
     } else {
       setActiveTimeline(null);
     }
@@ -64,6 +74,50 @@ export default function TimelineManager() {
         params: { timelineId: activeTimeline.id },
       });
     }
+  };
+
+  const handleUpdateSimulationDate = async () => {
+    if (!activeTimeline || activeTimeline.mode !== "manual") return;
+
+    setUpdating(true);
+    const result = await updateTimelineSimulationDate(simulationDate);
+
+    if (result.success) {
+      await loadData();
+      Alert.alert("Berhasil", "Tanggal simulasi berhasil diperbarui!");
+    } else {
+      Alert.alert("Error", result.error);
+    }
+    setUpdating(false);
+  };
+
+  const handleBulkUpdateStatus = async () => {
+    if (!activeTimeline) return;
+
+    Alert.alert(
+      "Update Status Pembayaran",
+      "Memperbarui status semua pembayaran berdasarkan timeline dan waktu saat ini. Lanjutkan?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Update",
+          onPress: async () => {
+            setUpdating(true);
+            const result = await bulkUpdatePaymentStatus();
+
+            if (result.success) {
+              Alert.alert(
+                "Berhasil",
+                `${result.updatedCount} pembayaran berhasil diperbarui!`
+              );
+            } else {
+              Alert.alert("Error", result.error);
+            }
+            setUpdating(false);
+          },
+        },
+      ]
+    );
   };
 
   const handleResetPayments = () => {
@@ -141,22 +195,45 @@ export default function TimelineManager() {
   };
 
   const getTypeLabel = (type) => {
-    switch (type) {
-      case "yearly":
-        return "Tahunan";
-      case "monthly":
-        return "Bulanan";
-      case "weekly":
-        return "Mingguan";
-      default:
-        return "Custom";
-    }
+    const typeMap = {
+      yearly: "Tahunan",
+      monthly: "Bulanan",
+      weekly: "Mingguan",
+      daily: "Harian",
+      hourly: "Jam-an",
+      minute: "Menitan",
+    };
+    return typeMap[type] || "Custom";
   };
 
   const getActivePeriods = (timeline) => {
     if (!timeline || !timeline.periods) return 0;
     return Object.values(timeline.periods).filter((period) => period.active)
       .length;
+  };
+
+  const getTotalTimelineDuration = (timeline) => {
+    if (!timeline) return "";
+
+    const type = timeline.type;
+    const duration = timeline.duration;
+
+    switch (type) {
+      case "yearly":
+        return `${duration} tahun`;
+      case "monthly":
+        return `${duration} bulan`;
+      case "weekly":
+        return `${duration} minggu`;
+      case "daily":
+        return `${duration} hari`;
+      case "hourly":
+        return `${duration} jam`;
+      case "minute":
+        return `${duration} menit`;
+      default:
+        return `${duration} periode`;
+    }
   };
 
   if (loading) {
@@ -212,9 +289,9 @@ export default function TimelineManager() {
                 </View>
 
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Total Periode:</Text>
+                  <Text style={styles.detailLabel}>Durasi:</Text>
                   <Text style={styles.detailValue}>
-                    {activeTimeline.duration} periode
+                    {getTotalTimelineDuration(activeTimeline)}
                   </Text>
                 </View>
 
@@ -222,6 +299,15 @@ export default function TimelineManager() {
                   <Text style={styles.detailLabel}>Periode Aktif:</Text>
                   <Text style={styles.detailValue}>
                     {getActivePeriods(activeTimeline)} periode
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Mode:</Text>
+                  <Text style={styles.detailValue}>
+                    {activeTimeline.mode === "manual"
+                      ? "⚙️ Manual"
+                      : "🕐 Real-time"}
                   </Text>
                 </View>
 
@@ -249,11 +335,50 @@ export default function TimelineManager() {
                 </View>
               </View>
 
+              {activeTimeline.mode === "manual" && (
+                <View style={styles.simulationSection}>
+                  <Text style={styles.simulationTitle}>
+                    🕐 Kontrol Waktu Manual
+                  </Text>
+
+                  <DatePicker
+                    label="Simulasi Tanggal Sekarang"
+                    value={simulationDate}
+                    onChange={setSimulationDate}
+                  />
+
+                  <Button
+                    title={
+                      updating ? "Memperbarui..." : "Update Tanggal Simulasi"
+                    }
+                    onPress={handleUpdateSimulationDate}
+                    disabled={updating}
+                    style={styles.updateDateButton}
+                  />
+
+                  <View style={styles.infoBox}>
+                    <Text style={styles.infoText}>
+                      ℹ️ Mengubah tanggal simulasi akan mempengaruhi perhitungan
+                      status "terlambat" untuk semua pembayaran
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.timelineActions}>
                 <Button
                   title="Kelola Pembayaran"
                   onPress={handleManagePayments}
                   style={styles.manageButton}
+                />
+
+                <Button
+                  title={
+                    updating ? "Memperbarui..." : "🔄 Update Status Pembayaran"
+                  }
+                  onPress={handleBulkUpdateStatus}
+                  disabled={updating}
+                  style={styles.updateButton}
                 />
 
                 <View style={styles.dangerActions}>
@@ -454,11 +579,41 @@ const styles = StyleSheet.create({
     color: "#1e293b",
     fontWeight: "600",
   },
+  simulationSection: {
+    backgroundColor: "#f0f9ff",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  simulationTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#0369a1",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  updateDateButton: {
+    backgroundColor: "#0369a1",
+    marginBottom: 12,
+  },
+  infoBox: {
+    backgroundColor: "#dbeafe",
+    padding: 12,
+    borderRadius: 8,
+  },
+  infoText: {
+    fontSize: 12,
+    color: "#1e40af",
+    lineHeight: 16,
+  },
   timelineActions: {
     gap: 12,
   },
   manageButton: {
     backgroundColor: "#3b82f6",
+  },
+  updateButton: {
+    backgroundColor: "#059669",
   },
   dangerActions: {
     flexDirection: "row",

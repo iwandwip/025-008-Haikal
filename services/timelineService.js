@@ -78,6 +78,8 @@ export const createActiveTimeline = async (timelineData) => {
       totalAmount: timelineData.totalAmount,
       amountPerPeriod: timelineData.amountPerPeriod,
       startDate: timelineData.startDate,
+      mode: timelineData.mode,
+      simulationDate: timelineData.mode === 'manual' ? timelineData.simulationDate : null,
       holidays: timelineData.holidays || [],
       periods: periods,
       status: 'active',
@@ -109,6 +111,32 @@ export const getActiveTimeline = async () => {
     }
   } catch (error) {
     console.error('Error getting active timeline:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getCurrentDate = (timeline) => {
+  if (timeline && timeline.mode === 'manual' && timeline.simulationDate) {
+    return new Date(timeline.simulationDate);
+  }
+  return new Date();
+};
+
+export const updateTimelineSimulationDate = async (simulationDate) => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const timelineRef = doc(db, 'active_timeline', 'current');
+    await updateDoc(timelineRef, {
+      simulationDate: simulationDate,
+      updatedAt: new Date()
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating simulation date:', error);
     return { success: false, error: error.message };
   }
 };
@@ -178,6 +206,7 @@ export const generatePaymentsForTimeline = async (timelineId) => {
             period: periodKey,
             periodLabel: period.label,
             amount: period.amount,
+            dueDate: period.dueDate,
             status: 'belum_bayar',
             paymentDate: null,
             paymentMethod: null,
@@ -270,6 +299,21 @@ export const resetTimelinePayments = async (timelineId) => {
   }
 };
 
+export const calculatePaymentStatus = (payment, timeline) => {
+  if (!payment || !timeline) return payment?.status || 'belum_bayar';
+  
+  if (payment.status === 'lunas') return 'lunas';
+  
+  const currentDate = getCurrentDate(timeline);
+  const dueDate = new Date(payment.dueDate);
+  
+  if (currentDate > dueDate) {
+    return 'terlambat';
+  }
+  
+  return 'belum_bayar';
+};
+
 const generatePeriods = (timelineData) => {
   const periods = {};
   const activePeriods = timelineData.duration - (timelineData.holidays?.length || 0);
@@ -282,6 +326,7 @@ const generatePeriods = (timelineData) => {
     periods[periodKey] = {
       number: i,
       label: getPeriodLabel(timelineData.type, i, timelineData.startDate),
+      dueDate: calculateDueDate(timelineData.type, i, timelineData.startDate),
       active: !isHoliday,
       amount: isHoliday ? 0 : amountPerPeriod,
       isHoliday: isHoliday
@@ -292,25 +337,46 @@ const generatePeriods = (timelineData) => {
 };
 
 const getPeriodLabel = (type, number, startDate) => {
-  const start = new Date(startDate);
+  const typeLabels = {
+    yearly: 'Tahun',
+    monthly: 'Bulan', 
+    weekly: 'Minggu',
+    daily: 'Hari',
+    hourly: 'Jam',
+    minute: 'Menit'
+  };
   
+  return `${typeLabels[type]} ${number}`;
+};
+
+const calculateDueDate = (type, periodNumber, startDate) => {
+  const start = new Date(startDate);
+  let dueDate = new Date(start);
+
   switch (type) {
     case 'yearly':
-      const month = new Date(start.getFullYear(), start.getMonth() + (number - 1), 1);
-      return month.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-    
+      dueDate.setFullYear(start.getFullYear() + periodNumber);
+      break;
     case 'monthly':
-      const day = new Date(start.getFullYear(), start.getMonth(), start.getDate() + (number - 1));
-      return day.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-    
+      dueDate.setMonth(start.getMonth() + periodNumber);
+      break;
     case 'weekly':
-      const week = new Date(start.getTime() + ((number - 1) * 7 * 24 * 60 * 60 * 1000));
-      const weekEnd = new Date(week.getTime() + (6 * 24 * 60 * 60 * 1000));
-      return `Minggu ${number} (${week.toLocaleDateString('id-ID')} - ${weekEnd.toLocaleDateString('id-ID')})`;
-    
+      dueDate.setDate(start.getDate() + (periodNumber * 7));
+      break;
+    case 'daily':
+      dueDate.setDate(start.getDate() + periodNumber);
+      break;
+    case 'hourly':
+      dueDate.setHours(start.getHours() + periodNumber);
+      break;
+    case 'minute':
+      dueDate.setMinutes(start.getMinutes() + periodNumber);
+      break;
     default:
-      return `Periode ${number}`;
+      dueDate.setDate(start.getDate() + periodNumber);
   }
+
+  return dueDate.toISOString();
 };
 
 const getAllSantri = async () => {

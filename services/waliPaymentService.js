@@ -8,7 +8,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { getActiveTimeline } from './timelineService';
+import { getActiveTimeline, calculatePaymentStatus } from './timelineService';
 
 let cachedPayments = new Map();
 let cachedTimeline = null;
@@ -72,12 +72,13 @@ export const getWaliPaymentHistory = async (santriId) => {
         const period = timeline.periods[periodKey];
         
         if (querySnapshot.empty) {
-          return {
+          const payment = {
             id: `${santriId}_${periodKey}`,
             santriId: santriId,
             period: periodKey,
             periodLabel: period.label,
             amount: period.amount,
+            dueDate: period.dueDate,
             status: 'belum_bayar',
             paymentDate: null,
             paymentMethod: null,
@@ -87,24 +88,31 @@ export const getWaliPaymentHistory = async (santriId) => {
             createdAt: new Date(),
             updatedAt: new Date()
           };
+          
+          payment.status = calculatePaymentStatus(payment, timeline);
+          return payment;
         } else {
           const paymentData = querySnapshot.docs[0].data();
-          return {
+          const payment = {
             id: querySnapshot.docs[0].id,
             ...paymentData,
             periodData: period,
             periodKey: periodKey
           };
+          
+          payment.status = calculatePaymentStatus(payment, timeline);
+          return payment;
         }
       } catch (periodError) {
         console.warn(`Error loading period ${periodKey}:`, periodError);
         const period = timeline.periods[periodKey];
-        return {
+        const payment = {
           id: `${santriId}_${periodKey}`,
           santriId: santriId,
           period: periodKey,
           periodLabel: period.label,
           amount: period.amount,
+          dueDate: period.dueDate,
           status: 'belum_bayar',
           paymentDate: null,
           paymentMethod: null,
@@ -114,6 +122,9 @@ export const getWaliPaymentHistory = async (santriId) => {
           createdAt: new Date(),
           updatedAt: new Date()
         };
+        
+        payment.status = calculatePaymentStatus(payment, timeline);
+        return payment;
       }
     });
 
@@ -176,6 +187,7 @@ export const updateWaliPaymentStatus = async (timelineId, periodKey, santriId, u
               period: periodKey,
               periodLabel: period.label,
               amount: period.amount,
+              dueDate: period.dueDate,
               ...updatePayload,
               createdAt: new Date()
             };

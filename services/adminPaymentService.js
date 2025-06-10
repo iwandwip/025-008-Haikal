@@ -10,7 +10,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { getActiveTimeline } from './timelineService';
+import { getActiveTimeline, getCurrentDate, calculatePaymentStatus } from './timelineService';
 
 let cachedUsers = null;
 let cachedTimeline = null;
@@ -103,34 +103,45 @@ export const getUserPaymentSummaryOptimized = async (userId, timeline) => {
         const period = timeline.periods[periodKey];
         
         if (querySnapshot.empty) {
-          return {
+          const payment = {
             id: `${userId}_${periodKey}`,
             santriId: userId,
             period: periodKey,
             amount: period.amount,
+            dueDate: period.dueDate,
             status: 'belum_bayar',
             paymentDate: null,
             periodData: period
           };
+          
+          payment.status = calculatePaymentStatus(payment, timeline);
+          return payment;
         } else {
           const paymentData = querySnapshot.docs[0].data();
-          return {
+          const payment = {
             id: querySnapshot.docs[0].id,
             ...paymentData,
             periodData: period
           };
+          
+          payment.status = calculatePaymentStatus(payment, timeline);
+          return payment;
         }
       } catch (periodError) {
         const period = timeline.periods[periodKey];
-        return {
+        const payment = {
           id: `${userId}_${periodKey}`,
           santriId: userId,
           period: periodKey,
           amount: period.amount,
+          dueDate: period.dueDate,
           status: 'belum_bayar',
           paymentDate: null,
           periodData: period
         };
+        
+        payment.status = calculatePaymentStatus(payment, timeline);
+        return payment;
       }
     });
 
@@ -217,12 +228,13 @@ export const getUserDetailedPayments = async (userId) => {
         const period = timeline.periods[periodKey];
         
         if (querySnapshot.empty) {
-          return {
+          const payment = {
             id: `${userId}_${periodKey}`,
             santriId: userId,
             period: periodKey,
             periodLabel: period.label,
             amount: period.amount,
+            dueDate: period.dueDate,
             status: 'belum_bayar',
             paymentDate: null,
             paymentMethod: null,
@@ -232,23 +244,30 @@ export const getUserDetailedPayments = async (userId) => {
             createdAt: new Date(),
             updatedAt: new Date()
           };
+          
+          payment.status = calculatePaymentStatus(payment, timeline);
+          return payment;
         } else {
           const paymentData = querySnapshot.docs[0].data();
-          return {
+          const payment = {
             id: querySnapshot.docs[0].id,
             ...paymentData,
             periodData: period,
             periodKey: periodKey
           };
+          
+          payment.status = calculatePaymentStatus(payment, timeline);
+          return payment;
         }
       } catch (periodError) {
         const period = timeline.periods[periodKey];
-        return {
+        const payment = {
           id: `${userId}_${periodKey}`,
           santriId: userId,
           period: periodKey,
           periodLabel: period.label,
           amount: period.amount,
+          dueDate: period.dueDate,
           status: 'belum_bayar',
           paymentDate: null,
           paymentMethod: null,
@@ -258,6 +277,9 @@ export const getUserDetailedPayments = async (userId) => {
           createdAt: new Date(),
           updatedAt: new Date()
         };
+        
+        payment.status = calculatePaymentStatus(payment, timeline);
+        return payment;
       }
     });
 
@@ -316,6 +338,7 @@ export const updateUserPaymentStatus = async (timelineId, periodKey, santriId, u
               period: periodKey,
               periodLabel: period.label,
               amount: period.amount,
+              dueDate: period.dueDate,
               ...updatePayload,
               createdAt: new Date()
             };
@@ -338,6 +361,67 @@ export const updateUserPaymentStatus = async (timelineId, periodKey, santriId, u
     return { success: true };
   } catch (error) {
     console.error('Error updating user payment status:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const bulkUpdatePaymentStatus = async () => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const timelineResult = await getActiveTimeline();
+    if (!timelineResult.success) {
+      throw new Error('Timeline aktif tidak ditemukan');
+    }
+
+    const timeline = timelineResult.timeline;
+    const activePeriods = Object.keys(timeline.periods).filter(
+      periodKey => timeline.periods[periodKey].active
+    );
+
+    const batch = writeBatch(db);
+    let updateCount = 0;
+
+    for (const periodKey of activePeriods) {
+      const paymentsRef = collection(
+        db, 
+        'payments', 
+        timeline.id, 
+        'periods', 
+        periodKey, 
+        'santri_payments'
+      );
+      
+      const querySnapshot = await getDocs(paymentsRef);
+      
+      querySnapshot.forEach((doc) => {
+        const payment = doc.data();
+        const newStatus = calculatePaymentStatus(payment, timeline);
+        
+        if (payment.status !== newStatus) {
+          const paymentRef = doc.ref;
+          batch.update(paymentRef, {
+            status: newStatus,
+            updatedAt: new Date()
+          });
+          updateCount++;
+        }
+      });
+    }
+
+    if (updateCount > 0) {
+      await batch.commit();
+    }
+
+    cachedUsers = null;
+    cachedTimeline = null;
+    cacheTimestamp = null;
+
+    return { success: true, updatedCount };
+  } catch (error) {
+    console.error('Error bulk updating payment status:', error);
     return { success: false, error: error.message };
   }
 };

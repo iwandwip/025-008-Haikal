@@ -27,11 +27,13 @@ export default function CreateTimeline() {
   const [templates, setTemplates] = useState([]);
   const [formData, setFormData] = useState({
     name: "",
-    type: "yearly",
+    type: "monthly",
     duration: 12,
     baseAmount: 480000,
     totalAmount: 480000,
     startDate: new Date().toISOString().split("T")[0],
+    mode: "realtime",
+    simulationDate: new Date().toISOString().split("T")[0],
     holidays: [],
     saveAsTemplate: false,
   });
@@ -58,21 +60,16 @@ export default function CreateTimeline() {
         newData.totalAmount = calculateTotalAmount(newData);
       }
 
+      if (field === "type" || field === "duration") {
+        newData.holidays = [];
+      }
+
       return newData;
     });
   };
 
   const calculateTotalAmount = (data) => {
-    switch (data.type) {
-      case "yearly":
-        return data.baseAmount * (data.duration / 12);
-      case "monthly":
-        return data.baseAmount * (data.duration / 30);
-      case "weekly":
-        return data.baseAmount * (data.duration / 4);
-      default:
-        return data.baseAmount;
-    }
+    return data.baseAmount * data.duration;
   };
 
   const calculateAmountPerPeriod = () => {
@@ -82,17 +79,64 @@ export default function CreateTimeline() {
       : 0;
   };
 
-  const getTypeOptions = () => [
-    { value: "yearly", label: "Tahunan (Bulan)", duration: 12 },
-    { value: "monthly", label: "Bulanan (Hari)", duration: 30 },
-    { value: "weekly", label: "Mingguan", duration: 4 },
+  const getTimelineTypes = () => [
+    { value: "yearly", label: "Tahunan", unit: "Tahun", maxPeriods: 50 },
+    { value: "monthly", label: "Bulanan", unit: "Bulan", maxPeriods: 365 },
+    { value: "weekly", label: "Mingguan", unit: "Minggu", maxPeriods: 365 },
+    { value: "daily", label: "Harian", unit: "Hari", maxPeriods: 365 },
+    { value: "hourly", label: "Jam-an", unit: "Jam", maxPeriods: 365 },
+    { value: "minute", label: "Menitan", unit: "Menit", maxPeriods: 365 },
   ];
 
+  const getSelectedType = () => {
+    return getTimelineTypes().find((type) => type.value === formData.type);
+  };
+
+  const validateDuration = (duration, type) => {
+    const typeConfig = getTimelineTypes().find((t) => t.value === type);
+    if (duration < 1) return false;
+    if (duration > typeConfig.maxPeriods) return false;
+    return true;
+  };
+
+  const getTotalTimelineDuration = () => {
+    const type = formData.type;
+    const duration = formData.duration;
+
+    switch (type) {
+      case "yearly":
+        return `${duration} tahun`;
+      case "monthly":
+        return `${duration} bulan`;
+      case "weekly":
+        return `${duration} minggu`;
+      case "daily":
+        return `${duration} hari`;
+      case "hourly":
+        return `${duration} jam`;
+      case "minute":
+        return `${duration} menit`;
+      default:
+        return `${duration} periode`;
+    }
+  };
+
   const handleTypeChange = (type) => {
-    const option = getTypeOptions().find((opt) => opt.value === type);
+    const typeConfig = getTimelineTypes().find((t) => t.value === type);
     updateFormData("type", type);
-    updateFormData("duration", option.duration);
-    updateFormData("holidays", []);
+
+    if (formData.duration > typeConfig.maxPeriods) {
+      updateFormData("duration", typeConfig.maxPeriods);
+    }
+  };
+
+  const handleDurationChange = (value) => {
+    const duration = parseInt(value) || 0;
+    const isValid = validateDuration(duration, formData.type);
+
+    if (isValid) {
+      updateFormData("duration", duration);
+    }
   };
 
   const handleUseTemplate = (template) => {
@@ -102,7 +146,7 @@ export default function CreateTimeline() {
       type: template.type,
       duration: template.duration,
       baseAmount: template.baseAmount,
-      totalAmount: template.baseAmount,
+      totalAmount: template.baseAmount * template.duration,
       holidays: template.holidays || [],
     });
   };
@@ -121,9 +165,21 @@ export default function CreateTimeline() {
         Alert.alert("Error", "Nama timeline wajib diisi");
         return;
       }
+      if (!validateDuration(formData.duration, formData.type)) {
+        const typeConfig = getSelectedType();
+        Alert.alert(
+          "Error",
+          `Durasi harus antara 1-${
+            typeConfig.maxPeriods
+          } ${typeConfig.unit.toLowerCase()}`
+        );
+        return;
+      }
       setStep(2);
     } else if (step === 2) {
       setStep(3);
+    } else if (step === 3) {
+      setStep(4);
     }
   };
 
@@ -235,6 +291,8 @@ export default function CreateTimeline() {
           <View style={[styles.stepDot, step >= 2 && styles.stepDotActive]} />
           <View style={[styles.stepLine, step >= 3 && styles.stepLineActive]} />
           <View style={[styles.stepDot, step >= 3 && styles.stepDotActive]} />
+          <View style={[styles.stepLine, step >= 4 && styles.stepLineActive]} />
+          <View style={[styles.stepDot, step >= 4 && styles.stepDotActive]} />
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -253,7 +311,12 @@ export default function CreateTimeline() {
                     >
                       <Text style={styles.templateName}>{template.name}</Text>
                       <Text style={styles.templateDetails}>
-                        {template.type} - {template.duration} periode
+                        {
+                          getTimelineTypes().find(
+                            (t) => t.value === template.type
+                          )?.label
+                        }{" "}
+                        - {template.duration} periode
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -269,7 +332,7 @@ export default function CreateTimeline() {
 
               <View style={styles.fieldGroup}>
                 <Text style={styles.fieldLabel}>Tipe Timeline</Text>
-                {getTypeOptions().map((option) => (
+                {getTimelineTypes().map((option) => (
                   <TouchableOpacity
                     key={option.value}
                     style={[
@@ -285,24 +348,28 @@ export default function CreateTimeline() {
                           styles.typeButtonTextActive,
                       ]}
                     >
-                      {option.label}
+                      {option.label} (Max: {option.maxPeriods} {option.unit})
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
               <Input
-                label="Durasi (Periode)"
-                placeholder="12"
+                label={`Durasi (${getSelectedType()?.unit})`}
+                placeholder={`Masukkan jumlah ${getSelectedType()?.unit.toLowerCase()}`}
                 value={formData.duration.toString()}
-                onChangeText={(value) =>
-                  updateFormData("duration", parseInt(value) || 0)
-                }
+                onChangeText={handleDurationChange}
                 keyboardType="numeric"
               />
 
+              <View style={styles.calculationInfo}>
+                <Text style={styles.calculationText}>
+                  Total Durasi: {getTotalTimelineDuration()}
+                </Text>
+              </View>
+
               <Input
-                label="Base Amount"
+                label="Amount Per Periode"
                 placeholder="480000"
                 value={formData.baseAmount.toString()}
                 onChangeText={(value) =>
@@ -326,6 +393,73 @@ export default function CreateTimeline() {
           )}
 
           {step === 2 && (
+            <View style={styles.stepContent}>
+              <Text style={styles.stepTitle}>Mode Timeline</Text>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Mode Waktu</Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    formData.mode === "realtime" && styles.typeButtonActive,
+                  ]}
+                  onPress={() => updateFormData("mode", "realtime")}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      formData.mode === "realtime" &&
+                        styles.typeButtonTextActive,
+                    ]}
+                  >
+                    🕐 Real-time (Production)
+                  </Text>
+                  <Text style={styles.typeButtonDesc}>
+                    Menggunakan waktu sekarang yang sebenarnya
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeButton,
+                    formData.mode === "manual" && styles.typeButtonActive,
+                  ]}
+                  onPress={() => updateFormData("mode", "manual")}
+                >
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      formData.mode === "manual" && styles.typeButtonTextActive,
+                    ]}
+                  >
+                    ⚙️ Manual (Testing)
+                  </Text>
+                  <Text style={styles.typeButtonDesc}>
+                    Bisa mengatur "waktu sekarang" untuk testing
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {formData.mode === "manual" && (
+                <DatePicker
+                  label="Simulasi Tanggal Sekarang"
+                  value={formData.simulationDate}
+                  onChange={(value) => updateFormData("simulationDate", value)}
+                />
+              )}
+
+              <View style={styles.infoBox}>
+                <Text style={styles.infoText}>
+                  {formData.mode === "realtime"
+                    ? "ℹ️ Mode real-time akan menggunakan tanggal sekarang untuk menghitung status terlambat"
+                    : "ℹ️ Mode manual memungkinkan Anda mengatur tanggal simulasi untuk testing dan demo"}
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {step === 3 && (
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Atur Periode Libur</Text>
 
@@ -351,7 +485,7 @@ export default function CreateTimeline() {
             </View>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>Konfirmasi & Simpan</Text>
 
@@ -366,20 +500,34 @@ export default function CreateTimeline() {
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Tipe:</Text>
                   <Text style={styles.summaryValue}>
-                    {
-                      getTypeOptions().find(
-                        (opt) => opt.value === formData.type
-                      )?.label
-                    }
+                    {getSelectedType()?.label}
                   </Text>
                 </View>
 
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Durasi:</Text>
                   <Text style={styles.summaryValue}>
-                    {formData.duration} periode
+                    {getTotalTimelineDuration()}
                   </Text>
                 </View>
+
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Mode:</Text>
+                  <Text style={styles.summaryValue}>
+                    {formData.mode === "realtime" ? "Real-time" : "Manual"}
+                  </Text>
+                </View>
+
+                {formData.mode === "manual" && (
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Simulasi Date:</Text>
+                    <Text style={styles.summaryValue}>
+                      {new Date(formData.simulationDate).toLocaleDateString(
+                        "id-ID"
+                      )}
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Total Amount:</Text>
@@ -427,7 +575,7 @@ export default function CreateTimeline() {
               />
             )}
 
-            {step < 3 ? (
+            {step < 4 ? (
               <Button
                 title="Selanjutnya"
                 onPress={handleNext}
@@ -495,10 +643,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#3b82f6",
   },
   stepLine: {
-    width: 40,
+    width: 30,
     height: 2,
     backgroundColor: "#e2e8f0",
-    marginHorizontal: 8,
+    marginHorizontal: 6,
   },
   stepLineActive: {
     backgroundColor: "#3b82f6",
@@ -570,10 +718,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#374151",
     textAlign: "center",
+    fontWeight: "600",
   },
   typeButtonTextActive: {
     color: "#3b82f6",
-    fontWeight: "600",
+  },
+  typeButtonDesc: {
+    fontSize: 12,
+    color: "#64748b",
+    textAlign: "center",
+    marginTop: 4,
   },
   calculationInfo: {
     backgroundColor: "#f0f9ff",
@@ -585,6 +739,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#0369a1",
     fontWeight: "500",
+  },
+  infoBox: {
+    backgroundColor: "#dbeafe",
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#1e40af",
+    lineHeight: 20,
   },
   periodInstructions: {
     fontSize: 14,
