@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
@@ -25,6 +26,7 @@ function StatusPembayaran() {
   const [payments, setPayments] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingText, setLoadingText] = useState("Memuat data pembayaran...");
 
   const loadData = async () => {
     try {
@@ -36,12 +38,22 @@ function StatusPembayaran() {
         return;
       }
 
+      setLoadingText("Mengambil timeline aktif...");
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      setLoadingText("Memuat data pembayaran...");
       const result = await getWaliPaymentHistory(userProfile.id);
 
       if (result.success) {
+        setLoadingText("Menyiapkan data...");
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
         setPayments(result.payments);
         setTimeline(result.timeline);
         setSummary(getPaymentSummary(result.payments));
+
+        setLoadingText("Menyelesaikan...");
+        await new Promise((resolve) => setTimeout(resolve, 200));
       } else {
         setPayments([]);
         setSummary(null);
@@ -123,6 +135,46 @@ function StatusPembayaran() {
       year: "numeric",
     });
   };
+
+  const renderLoadingScreen = () => (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
+        {userProfile && (
+          <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
+        )}
+      </View>
+
+      <View style={styles.loadingContainer}>
+        <View style={styles.loadingCard}>
+          <ActivityIndicator
+            size="large"
+            color={colors.primary}
+            style={styles.loadingSpinner}
+          />
+          <Text style={[styles.loadingMainText, { color: colors.gray900 }]}>
+            {loadingText}
+          </Text>
+          <Text style={[styles.loadingSubText, { color: colors.gray600 }]}>
+            Mohon tunggu sebentar...
+          </Text>
+
+          <View style={styles.loadingProgress}>
+            <View
+              style={[styles.progressBar, { backgroundColor: colors.gray200 }]}
+            >
+              <View
+                style={[
+                  styles.progressFill,
+                  { backgroundColor: colors.primary },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
 
   const renderSummaryCard = () => {
     if (!summary) return null;
@@ -333,23 +385,7 @@ function StatusPembayaran() {
   const styles = createStyles(colors);
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
-          {userProfile && (
-            <Text style={styles.subtitle}>
-              Santri: {userProfile.namaSantri}
-            </Text>
-          )}
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={[styles.loadingText, { color: colors.gray600 }]}>
-            Memuat data pembayaran...
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
+    return renderLoadingScreen();
   }
 
   return (
@@ -384,11 +420,23 @@ function StatusPembayaran() {
               onRefresh={onRefresh}
               colors={[colors.primary]}
               tintColor={colors.primary}
+              title="Memuat ulang..."
+              titleColor={colors.gray600}
             />
           }
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+          removeClippedSubviews={true}
+          getItemLayout={(data, index) => ({
+            length: index === 0 ? 250 : 180,
+            offset: index === 0 ? 0 : 250 + (index - 1) * 180,
+            index,
+          })}
         />
       ) : (
         <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyIcon, { color: colors.gray400 }]}>📊</Text>
           <Text style={[styles.emptyText, { color: colors.gray600 }]}>
             {timeline
               ? "Belum ada data pembayaran"
@@ -396,7 +444,7 @@ function StatusPembayaran() {
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.gray500 }]}>
             {timeline
-              ? "Data pembayaran akan muncul setelah admin generate tagihan"
+              ? "Data pembayaran akan muncul setelah admin membuat timeline"
               : "Admin belum membuat timeline pembayaran"}
           </Text>
         </View>
@@ -441,9 +489,38 @@ const createStyles = (colors) =>
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
+      paddingHorizontal: 24,
     },
-    loadingText: {
-      fontSize: 16,
+    loadingCard: {
+      backgroundColor: colors.white,
+      borderRadius: 20,
+      padding: 40,
+      alignItems: "center",
+      shadowColor: colors.shadow.color,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.15,
+      shadowRadius: 20,
+      elevation: 10,
+      borderWidth: 1,
+      borderColor: colors.gray200,
+      minWidth: 300,
+    },
+    loadingSpinner: {
+      marginBottom: 20,
+    },
+    loadingMainText: {
+      fontSize: 18,
+      fontWeight: "600",
+      textAlign: "center",
+      marginBottom: 8,
+    },
+    loadingSubText: {
+      fontSize: 14,
+      textAlign: "center",
+      marginBottom: 24,
+    },
+    loadingProgress: {
+      width: "100%",
     },
     listContent: {
       padding: 24,
@@ -490,6 +567,7 @@ const createStyles = (colors) =>
     progressFill: {
       height: "100%",
       borderRadius: 4,
+      transition: "width 0.3s ease",
     },
     summaryStats: {
       marginBottom: 16,
@@ -612,9 +690,13 @@ const createStyles = (colors) =>
       alignItems: "center",
       paddingHorizontal: 24,
     },
+    emptyIcon: {
+      fontSize: 64,
+      marginBottom: 16,
+    },
     emptyText: {
-      fontSize: 16,
-      fontWeight: "500",
+      fontSize: 18,
+      fontWeight: "600",
       marginBottom: 8,
       textAlign: "center",
     },
