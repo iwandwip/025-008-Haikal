@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,63 +11,100 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
+import {
+  getActiveTimeline,
+  getPaymentsByPeriod,
+} from "../../services/timelineService";
 
 function StatusPembayaran() {
   const { userProfile } = useAuth();
   const { theme } = useSettings();
   const colors = getColors(theme);
   const [refreshing, setRefreshing] = useState(false);
+  const [timeline, setTimeline] = useState(null);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const staticPaymentData = [
-    {
-      id: 1,
-      bulan: "Januari 2024",
-      nominal: 40000,
-      status: "Lunas",
-      tanggalBayar: "2024-01-05",
-      metodeBayar: "Tunai",
-    },
-    {
-      id: 2,
-      bulan: "Februari 2024",
-      nominal: 40000,
-      status: "Lunas",
-      tanggalBayar: "2024-02-03",
-      metodeBayar: "Online",
-    },
-    {
-      id: 3,
-      bulan: "Maret 2024",
-      nominal: 40000,
-      status: "Belum Lunas",
-      tanggalBayar: null,
-      metodeBayar: null,
-    },
-    {
-      id: 4,
-      bulan: "April 2024",
-      nominal: 40000,
-      status: "Belum Lunas",
-      tanggalBayar: null,
-      metodeBayar: null,
-    },
-  ];
+  const loadData = async () => {
+    try {
+      const timelineResult = await getActiveTimeline();
+      if (timelineResult.success) {
+        setTimeline(timelineResult.timeline);
+
+        if (userProfile?.id) {
+          const allPayments = [];
+
+          for (const periodKey of Object.keys(
+            timelineResult.timeline.periods
+          )) {
+            const period = timelineResult.timeline.periods[periodKey];
+            if (period.active) {
+              const paymentResult = await getPaymentsByPeriod(
+                timelineResult.timeline.id,
+                periodKey
+              );
+
+              if (paymentResult.success) {
+                const userPayment = paymentResult.payments.find(
+                  (p) => p.santriId === userProfile.id
+                );
+
+                if (userPayment) {
+                  allPayments.push({
+                    ...userPayment,
+                    periodData: period,
+                  });
+                }
+              }
+            }
+          }
+
+          setPayments(allPayments);
+        }
+      } else {
+        setPayments([]);
+      }
+    } catch (error) {
+      console.error("Error loading payment data:", error);
+      setPayments([]);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [userProfile]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
+    await loadData();
+    setRefreshing(false);
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "Lunas":
+      case "lunas":
         return colors.success;
-      case "Belum Lunas":
+      case "belum_bayar":
         return colors.error;
+      case "terlambat":
+        return colors.warning;
       default:
         return colors.gray500;
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case "lunas":
+        return "Lunas";
+      case "belum_bayar":
+        return "Belum Bayar";
+      case "terlambat":
+        return "Terlambat";
+      default:
+        return "Unknown";
     }
   };
 
@@ -98,7 +135,7 @@ function StatusPembayaran() {
     >
       <View style={styles.cardHeader}>
         <Text style={[styles.monthText, { color: colors.gray900 }]}>
-          {item.bulan}
+          {item.periodData.label}
         </Text>
         <View
           style={[
@@ -109,7 +146,7 @@ function StatusPembayaran() {
           <Text
             style={[styles.statusText, { color: getStatusColor(item.status) }]}
           >
-            {item.status}
+            {getStatusLabel(item.status)}
           </Text>
         </View>
       </View>
@@ -120,34 +157,34 @@ function StatusPembayaran() {
             Nominal:
           </Text>
           <Text style={[styles.valueText, { color: colors.gray900 }]}>
-            {formatCurrency(item.nominal)}
+            {formatCurrency(item.amount)}
           </Text>
         </View>
 
-        {item.tanggalBayar && (
+        {item.paymentDate && (
           <View style={styles.infoRow}>
             <Text style={[styles.labelText, { color: colors.gray600 }]}>
               Tanggal Bayar:
             </Text>
             <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {formatDate(item.tanggalBayar)}
+              {formatDate(item.paymentDate)}
             </Text>
           </View>
         )}
 
-        {item.metodeBayar && (
+        {item.paymentMethod && (
           <View style={styles.infoRow}>
             <Text style={[styles.labelText, { color: colors.gray600 }]}>
               Metode:
             </Text>
             <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {item.metodeBayar}
+              {item.paymentMethod === "tunai" ? "Tunai" : "Online"}
             </Text>
           </View>
         )}
       </View>
 
-      {item.status === "Belum Lunas" && (
+      {item.status === "belum_bayar" && (
         <TouchableOpacity
           style={[styles.payButton, { backgroundColor: colors.primary }]}
           onPress={() => {}}
@@ -162,6 +199,26 @@ function StatusPembayaran() {
 
   const styles = createStyles(colors);
 
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Status Pembayaran Bisyaroh</Text>
+          {userProfile && (
+            <Text style={styles.subtitle}>
+              Santri: {userProfile.namaSantri}
+            </Text>
+          )}
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: colors.gray600 }]}>
+            Memuat data pembayaran...
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -169,23 +226,41 @@ function StatusPembayaran() {
         {userProfile && (
           <Text style={styles.subtitle}>Santri: {userProfile.namaSantri}</Text>
         )}
+        {timeline && (
+          <Text style={styles.timelineInfo}>Timeline: {timeline.name}</Text>
+        )}
       </View>
 
-      <FlatList
-        data={staticPaymentData}
-        renderItem={renderPaymentItem}
-        keyExtractor={(item) => item.id.toString()}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
-          />
-        }
-      />
+      {payments.length > 0 ? (
+        <FlatList
+          data={payments}
+          renderItem={renderPaymentItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          }
+        />
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, { color: colors.gray600 }]}>
+            {timeline
+              ? "Belum ada data pembayaran"
+              : "Belum ada timeline aktif"}
+          </Text>
+          <Text style={[styles.emptySubtext, { color: colors.gray500 }]}>
+            {timeline
+              ? "Data pembayaran akan muncul setelah admin generate tagihan"
+              : "Admin belum membuat timeline pembayaran"}
+          </Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -214,6 +289,21 @@ const createStyles = (colors) =>
       fontSize: 14,
       color: colors.gray600,
       textAlign: "center",
+    },
+    timelineInfo: {
+      fontSize: 12,
+      color: colors.primary,
+      textAlign: "center",
+      marginTop: 4,
+      fontWeight: "500",
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingText: {
+      fontSize: 16,
     },
     listContent: {
       padding: 24,
@@ -273,6 +363,23 @@ const createStyles = (colors) =>
     payButtonText: {
       fontSize: 14,
       fontWeight: "600",
+    },
+    emptyContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingHorizontal: 24,
+    },
+    emptyText: {
+      fontSize: 16,
+      fontWeight: "500",
+      marginBottom: 8,
+      textAlign: "center",
+    },
+    emptySubtext: {
+      fontSize: 14,
+      textAlign: "center",
+      lineHeight: 20,
     },
   });
 

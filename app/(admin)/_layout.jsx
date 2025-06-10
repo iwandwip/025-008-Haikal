@@ -9,6 +9,9 @@ export default function AdminLayout() {
       <Stack.Screen name="daftar-santri" />
       <Stack.Screen name="detail-santri" />
       <Stack.Screen name="edit-santri" />
+      <Stack.Screen name="timeline-manager" />
+      <Stack.Screen name="create-timeline" />
+      <Stack.Screen name="payment-manager" />
     </Stack>
   );
 }

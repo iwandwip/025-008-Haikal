@@ -45,6 +45,10 @@ function AdminHome() {
     router.push("/(admin)/daftar-santri");
   };
 
+  const handleTimelineManager = () => {
+    router.push("/(admin)/timeline-manager");
+  };
+
   const handleCekPembayaran = () => {
     Alert.alert("Info", "Fitur ini akan segera tersedia");
   };
@@ -103,6 +107,25 @@ function AdminHome() {
 
           <TouchableOpacity
             style={[styles.menuCard, styles.tertiaryCard]}
+            onPress={handleTimelineManager}
+            activeOpacity={0.8}
+          >
+            <View style={styles.menuIcon}>
+              <Text style={styles.menuIconText}>📅</Text>
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>Timeline Manager</Text>
+              <Text style={styles.menuDesc}>
+                Kelola timeline dan pembayaran bisyaroh
+              </Text>
+            </View>
+            <View style={styles.menuArrow}>
+              <Text style={styles.arrowText}>→</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuCard, styles.quaternaryCard]}
             onPress={handleCekPembayaran}
             activeOpacity={0.8}
           >
@@ -192,6 +215,9 @@ const styles = StyleSheet.create({
   },
   tertiaryCard: {
     borderColor: "#f59e0b",
+  },
+  quaternaryCard: {
+    borderColor: "#8b5cf6",
   },
   menuIcon: {
     width: 60,
