@@ -17,6 +17,9 @@ const TimelinePicker = ({
   timelineType,
   error,
   style,
+  minDate = null,
+  maxDate = null,
+  placeholder = "Pilih waktu",
 }) => {
   const [showPicker, setShowPicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState(
@@ -129,66 +132,165 @@ const TimelinePicker = ({
     return Math.ceil((daysInMonth + firstDayOfWeek) / 7);
   };
 
-  const generateOptions = (level) => {
-    const currentDate = selectedDate;
+  const isWithinRange = (testDate) => {
+    if (!minDate && !maxDate) return true;
+
+    const test = new Date(testDate);
+    const min = minDate ? new Date(minDate) : null;
+    const max = maxDate ? new Date(maxDate) : null;
+
+    if (min && test < min) return false;
+    if (max && test > max) return false;
+
+    return true;
+  };
+
+  const getValidRange = (level) => {
+    const min = minDate ? new Date(minDate) : null;
+    const max = maxDate ? new Date(maxDate) : null;
+    const current = selectedDate;
 
     switch (level) {
       case "year":
-        const currentYear = new Date().getFullYear();
-        const years = [];
-        for (let i = currentYear - 5; i <= currentYear + 5; i++) {
-          years.push({ value: i, label: i.toString() });
-        }
-        return years;
+        const minYear = min ? min.getFullYear() : current.getFullYear() - 5;
+        const maxYear = max ? max.getFullYear() : current.getFullYear() + 5;
+        return { min: minYear, max: maxYear };
 
       case "month":
-        const months = [];
-        for (let i = 0; i < 12; i++) {
-          months.push({ value: i, label: getMonthName(i) });
+        if (
+          min &&
+          max &&
+          min.getFullYear() === max.getFullYear() &&
+          current.getFullYear() === min.getFullYear()
+        ) {
+          return { min: min.getMonth(), max: max.getMonth() };
         }
-        return months;
-
-      case "week":
-        const weeksCount = getWeeksInMonth(
-          currentDate.getFullYear(),
-          currentDate.getMonth()
-        );
-        const weeks = [];
-        for (let i = 1; i <= weeksCount; i++) {
-          weeks.push({ value: i, label: `Minggu ${i}` });
-        }
-        return weeks;
+        return { min: 0, max: 11 };
 
       case "day":
-        const daysCount = getDaysInMonth(
-          currentDate.getFullYear(),
-          currentDate.getMonth()
+        const daysInMonth = getDaysInMonth(
+          current.getFullYear(),
+          current.getMonth()
         );
-        const days = [];
-        for (let i = 1; i <= daysCount; i++) {
-          days.push({ value: i, label: i.toString() });
+        let minDay = 1;
+        let maxDay = daysInMonth;
+
+        if (
+          min &&
+          min.getFullYear() === current.getFullYear() &&
+          min.getMonth() === current.getMonth()
+        ) {
+          minDay = min.getDate();
         }
-        return days;
+        if (
+          max &&
+          max.getFullYear() === current.getFullYear() &&
+          max.getMonth() === current.getMonth()
+        ) {
+          maxDay = max.getDate();
+        }
+
+        return { min: minDay, max: maxDay };
 
       case "hour":
-        const hours = [];
-        for (let i = 0; i < 24; i++) {
-          const hourStr = i.toString().padStart(2, "0");
-          hours.push({ value: i, label: `${hourStr}:00` });
+        let minHour = 0;
+        let maxHour = 23;
+
+        if (min && isSameDay(min, current)) {
+          minHour = min.getHours();
         }
-        return hours;
+        if (max && isSameDay(max, current)) {
+          maxHour = max.getHours();
+        }
+
+        return { min: minHour, max: maxHour };
 
       case "minute":
-        const minutes = [];
-        for (let i = 0; i < 60; i++) {
-          const minuteStr = i.toString().padStart(2, "0");
-          minutes.push({ value: i, label: minuteStr });
+        let minMinute = 0;
+        let maxMinute = 59;
+
+        if (
+          min &&
+          isSameDay(min, current) &&
+          min.getHours() === current.getHours()
+        ) {
+          minMinute = min.getMinutes();
         }
-        return minutes;
+        if (
+          max &&
+          isSameDay(max, current) &&
+          max.getHours() === current.getHours()
+        ) {
+          maxMinute = max.getMinutes();
+        }
+
+        return { min: minMinute, max: maxMinute };
+
+      case "week":
+        const weeksInMonth = getWeeksInMonth(
+          current.getFullYear(),
+          current.getMonth()
+        );
+        return { min: 1, max: weeksInMonth };
 
       default:
-        return [];
+        return { min: 0, max: 100 };
     }
+  };
+
+  const isSameDay = (date1, date2) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+
+  const generateOptions = (level) => {
+    const range = getValidRange(level);
+    const options = [];
+
+    switch (level) {
+      case "year":
+        for (let i = range.min; i <= range.max; i++) {
+          options.push({ value: i, label: i.toString() });
+        }
+        break;
+
+      case "month":
+        for (let i = range.min; i <= range.max; i++) {
+          options.push({ value: i, label: getMonthName(i) });
+        }
+        break;
+
+      case "week":
+        for (let i = range.min; i <= range.max; i++) {
+          options.push({ value: i, label: `Minggu ${i}` });
+        }
+        break;
+
+      case "day":
+        for (let i = range.min; i <= range.max; i++) {
+          options.push({ value: i, label: i.toString() });
+        }
+        break;
+
+      case "hour":
+        for (let i = range.min; i <= range.max; i++) {
+          const hourStr = i.toString().padStart(2, "0");
+          options.push({ value: i, label: `${hourStr}:00` });
+        }
+        break;
+
+      case "minute":
+        for (let i = range.min; i <= range.max; i++) {
+          const minuteStr = i.toString().padStart(2, "0");
+          options.push({ value: i, label: minuteStr });
+        }
+        break;
+    }
+
+    return options;
   };
 
   const getValue = (level) => {
@@ -237,7 +339,9 @@ const TimelinePicker = ({
         break;
     }
 
-    setSelectedDate(newDate);
+    if (isWithinRange(newDate)) {
+      setSelectedDate(newDate);
+    }
   };
 
   const handleConfirm = () => {
@@ -302,13 +406,31 @@ const TimelinePicker = ({
         onPress={() => setShowPicker(true)}
         activeOpacity={0.7}
       >
-        <Text style={styles.displayText}>
-          {config.formatDisplay(selectedDate)}
+        <Text style={[styles.displayText, !value && styles.placeholderText]}>
+          {value ? config.formatDisplay(selectedDate) : placeholder}
         </Text>
         <Text style={styles.pickerIcon}>🕐</Text>
       </TouchableOpacity>
 
       {error && <Text style={styles.errorText}>{error}</Text>}
+
+      {(minDate || maxDate) && (
+        <View style={styles.rangeInfo}>
+          <Text style={styles.rangeText}>
+            {minDate &&
+              maxDate &&
+              `Range: ${config.formatDisplay(
+                new Date(minDate)
+              )} - ${config.formatDisplay(new Date(maxDate))}`}
+            {minDate &&
+              !maxDate &&
+              `Minimal: ${config.formatDisplay(new Date(minDate))}`}
+            {!minDate &&
+              maxDate &&
+              `Maksimal: ${config.formatDisplay(new Date(maxDate))}`}
+          </Text>
+        </View>
+      )}
 
       <Modal
         visible={showPicker}
@@ -390,6 +512,9 @@ const styles = StyleSheet.create({
     color: Colors.gray900,
     flex: 1,
   },
+  placeholderText: {
+    color: Colors.gray400,
+  },
   pickerIcon: {
     fontSize: 20,
     marginLeft: 8,
@@ -398,6 +523,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.error,
     marginTop: 4,
+  },
+  rangeInfo: {
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  rangeText: {
+    fontSize: 12,
+    color: Colors.gray500,
+    fontStyle: "italic",
   },
   modalOverlay: {
     flex: 1,

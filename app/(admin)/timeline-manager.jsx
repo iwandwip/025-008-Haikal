@@ -46,9 +46,7 @@ export default function TimelineManager() {
     if (timelineResult.success) {
       setActiveTimeline(timelineResult.timeline);
       if (timelineResult.timeline.simulationDate) {
-        setSimulationDateTime(
-          new Date(timelineResult.timeline.simulationDate).toISOString()
-        );
+        setSimulationDateTime(timelineResult.timeline.simulationDate);
       }
     } else {
       setActiveTimeline(null);
@@ -64,6 +62,38 @@ export default function TimelineManager() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const calculateEndDate = (timeline) => {
+    if (!timeline) return null;
+
+    const start = new Date(timeline.startDate);
+    const end = new Date(start);
+
+    switch (timeline.type) {
+      case "yearly":
+        end.setFullYear(start.getFullYear() + timeline.duration);
+        break;
+      case "monthly":
+        end.setMonth(start.getMonth() + timeline.duration);
+        break;
+      case "weekly":
+        end.setDate(start.getDate() + timeline.duration * 7);
+        break;
+      case "daily":
+        end.setDate(start.getDate() + timeline.duration);
+        break;
+      case "hourly":
+        end.setHours(start.getHours() + timeline.duration);
+        break;
+      case "minute":
+        end.setMinutes(start.getMinutes() + timeline.duration);
+        break;
+      default:
+        end.setDate(start.getDate() + timeline.duration);
+    }
+
+    return end.toISOString();
+  };
 
   const handleCreateTimeline = () => {
     router.push("/(admin)/create-timeline");
@@ -83,10 +113,7 @@ export default function TimelineManager() {
 
     setUpdating(true);
 
-    const simulationDate = new Date(simulationDateTime)
-      .toISOString()
-      .split("T")[0];
-    const result = await updateTimelineSimulationDate(simulationDate);
+    const result = await updateTimelineSimulationDate(simulationDateTime);
 
     if (result.success) {
       await loadData();
@@ -285,6 +312,54 @@ export default function TimelineManager() {
     }
   };
 
+  const formatTimelineRange = (timeline) => {
+    if (!timeline) return "Tidak diset";
+
+    const startDate = new Date(timeline.startDate);
+    const endDate = new Date(calculateEndDate(timeline));
+    const type = timeline.type;
+
+    const formatDate = (date) => {
+      switch (type) {
+        case "yearly":
+          return date.getFullYear().toString();
+        case "monthly":
+          return date.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          });
+        case "weekly":
+          const weekNum = Math.ceil(date.getDate() / 7);
+          return `Minggu ${weekNum}, ${date.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          })}`;
+        case "daily":
+          return date.toLocaleDateString("id-ID");
+        case "hourly":
+          return date.toLocaleString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        case "minute":
+          return date.toLocaleString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        default:
+          return date.toLocaleString("id-ID");
+      }
+    };
+
+    return `${formatDate(startDate)} sampai ${formatDate(endDate)}`;
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
@@ -345,6 +420,13 @@ export default function TimelineManager() {
                 </View>
 
                 <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Range Timeline:</Text>
+                  <Text style={styles.detailValue}>
+                    {formatTimelineRange(activeTimeline)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Periode Aktif:</Text>
                   <Text style={styles.detailValue}>
                     {getActivePeriods(activeTimeline)} periode
@@ -373,15 +455,6 @@ export default function TimelineManager() {
                     {formatCurrency(activeTimeline.amountPerPeriod)}
                   </Text>
                 </View>
-
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Tanggal Mulai:</Text>
-                  <Text style={styles.detailValue}>
-                    {new Date(activeTimeline.startDate).toLocaleDateString(
-                      "id-ID"
-                    )}
-                  </Text>
-                </View>
               </View>
 
               {activeTimeline.mode === "manual" && (
@@ -406,6 +479,9 @@ export default function TimelineManager() {
                     value={simulationDateTime}
                     onChange={setSimulationDateTime}
                     timelineType={activeTimeline.type}
+                    minDate={activeTimeline.startDate}
+                    maxDate={calculateEndDate(activeTimeline)}
+                    placeholder={`Pilih waktu simulasi dalam range timeline`}
                   />
 
                   <Button
@@ -422,6 +498,13 @@ export default function TimelineManager() {
                       ℹ️ Mengubah waktu simulasi akan mempengaruhi perhitungan
                       status "terlambat" untuk semua pembayaran berdasarkan
                       timeline {getTypeLabel(activeTimeline.type).toLowerCase()}
+                    </Text>
+                  </View>
+
+                  <View style={styles.rangeInfoBox}>
+                    <Text style={styles.rangeInfoText}>
+                      📅 Range simulasi yang diizinkan:{" "}
+                      {formatTimelineRange(activeTimeline)}
                     </Text>
                   </View>
                 </View>
@@ -626,7 +709,7 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
@@ -635,11 +718,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748b",
     fontWeight: "500",
+    flex: 1,
   },
   detailValue: {
     fontSize: 14,
     color: "#1e293b",
     fontWeight: "600",
+    flex: 1.5,
+    textAlign: "right",
   },
   simulationSection: {
     backgroundColor: "#f0f9ff",
@@ -679,11 +765,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#dbeafe",
     padding: 12,
     borderRadius: 8,
+    marginBottom: 8,
   },
   infoText: {
     fontSize: 12,
     color: "#1e40af",
     lineHeight: 16,
+  },
+  rangeInfoBox: {
+    backgroundColor: "#ecfdf5",
+    padding: 10,
+    borderRadius: 6,
+  },
+  rangeInfoText: {
+    fontSize: 12,
+    color: "#047857",
+    textAlign: "center",
   },
   timelineActions: {
     gap: 12,

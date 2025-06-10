@@ -14,7 +14,6 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
-import DatePicker from "../../components/ui/DatePicker";
 import TimelinePicker from "../../components/ui/TimelinePicker";
 import {
   createTimelineTemplate,
@@ -32,7 +31,7 @@ export default function CreateTimeline() {
     duration: 12,
     baseAmount: 480000,
     totalAmount: 480000,
-    startDate: new Date().toISOString().split("T")[0],
+    startDate: new Date().toISOString(),
     mode: "realtime",
     simulationDate: new Date().toISOString(),
     holidays: [],
@@ -65,8 +64,57 @@ export default function CreateTimeline() {
         newData.holidays = [];
       }
 
+      if (field === "startDate" || field === "type" || field === "duration") {
+        const endDate = calculateEndDate(
+          newData.startDate,
+          newData.type,
+          newData.duration
+        );
+        if (new Date(newData.simulationDate) > new Date(endDate)) {
+          newData.simulationDate = endDate;
+        }
+      }
+
       return newData;
     });
+  };
+
+  const calculateEndDate = (startDate, type, duration) => {
+    const start = new Date(startDate);
+    const end = new Date(start);
+
+    switch (type) {
+      case "yearly":
+        end.setFullYear(start.getFullYear() + duration);
+        break;
+      case "monthly":
+        end.setMonth(start.getMonth() + duration);
+        break;
+      case "weekly":
+        end.setDate(start.getDate() + duration * 7);
+        break;
+      case "daily":
+        end.setDate(start.getDate() + duration);
+        break;
+      case "hourly":
+        end.setHours(start.getHours() + duration);
+        break;
+      case "minute":
+        end.setMinutes(start.getMinutes() + duration);
+        break;
+      default:
+        end.setDate(start.getDate() + duration);
+    }
+
+    return end.toISOString();
+  };
+
+  const getTimelineEndDate = () => {
+    return calculateEndDate(
+      formData.startDate,
+      formData.type,
+      formData.duration
+    );
   };
 
   const calculateTotalAmount = (data) => {
@@ -313,6 +361,52 @@ export default function CreateTimeline() {
     }
   };
 
+  const formatTimelineRange = () => {
+    const startDate = new Date(formData.startDate);
+    const endDate = new Date(getTimelineEndDate());
+    const type = formData.type;
+
+    const formatDate = (date) => {
+      switch (type) {
+        case "yearly":
+          return date.getFullYear().toString();
+        case "monthly":
+          return date.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          });
+        case "weekly":
+          const weekNum = Math.ceil(date.getDate() / 7);
+          return `Minggu ${weekNum}, ${date.toLocaleDateString("id-ID", {
+            month: "long",
+            year: "numeric",
+          })}`;
+        case "daily":
+          return date.toLocaleDateString("id-ID");
+        case "hourly":
+          return date.toLocaleString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        case "minute":
+          return date.toLocaleString("id-ID", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        default:
+          return date.toLocaleString("id-ID");
+      }
+    };
+
+    return `${formatDate(startDate)} sampai ${formatDate(endDate)}`;
+  };
+
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView
@@ -428,11 +522,20 @@ export default function CreateTimeline() {
                 </Text>
               </View>
 
-              <DatePicker
-                label="Tanggal Mulai"
+              <TimelinePicker
+                label={`Waktu Mulai Timeline (${getSelectedType()?.label})`}
                 value={formData.startDate}
                 onChange={(value) => updateFormData("startDate", value)}
+                timelineType={formData.type}
+                placeholder={`Pilih waktu mulai ${getSelectedType()?.label.toLowerCase()}`}
               />
+
+              <View style={styles.timelineRangeInfo}>
+                <Text style={styles.timelineRangeLabel}>Range Timeline:</Text>
+                <Text style={styles.timelineRangeValue}>
+                  {formatTimelineRange()}
+                </Text>
+              </View>
             </View>
           )}
 
@@ -480,7 +583,8 @@ export default function CreateTimeline() {
                     ⚙️ Manual (Testing)
                   </Text>
                   <Text style={styles.typeButtonDesc}>
-                    Bisa mengatur "waktu sekarang" untuk testing
+                    Bisa mengatur "waktu sekarang" untuk testing dalam range
+                    timeline
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -496,6 +600,9 @@ export default function CreateTimeline() {
                       updateFormData("simulationDate", value)
                     }
                     timelineType={formData.type}
+                    minDate={formData.startDate}
+                    maxDate={getTimelineEndDate()}
+                    placeholder={`Pilih waktu simulasi dalam range timeline`}
                   />
 
                   <View style={styles.simulationPreview}>
@@ -506,6 +613,12 @@ export default function CreateTimeline() {
                       {formatSimulationDisplay()}
                     </Text>
                   </View>
+
+                  <View style={styles.rangeInfoBox}>
+                    <Text style={styles.rangeInfoText}>
+                      📅 Range simulasi: {formatTimelineRange()}
+                    </Text>
+                  </View>
                 </View>
               )}
 
@@ -513,7 +626,7 @@ export default function CreateTimeline() {
                 <Text style={styles.infoText}>
                   {formData.mode === "realtime"
                     ? "ℹ️ Mode real-time akan menggunakan tanggal sekarang untuk menghitung status terlambat"
-                    : `ℹ️ Mode manual memungkinkan Anda mengatur waktu simulasi dengan presisi ${getSelectedType()?.label.toLowerCase()} untuk testing dan demo`}
+                    : `ℹ️ Mode manual memungkinkan Anda mengatur waktu simulasi dengan presisi ${getSelectedType()?.label.toLowerCase()} dalam range timeline untuk testing dan demo`}
                 </Text>
               </View>
             </View>
@@ -568,6 +681,13 @@ export default function CreateTimeline() {
                   <Text style={styles.summaryLabel}>Durasi:</Text>
                   <Text style={styles.summaryValue}>
                     {getTotalTimelineDuration()}
+                  </Text>
+                </View>
+
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>Range Timeline:</Text>
+                  <Text style={styles.summaryValue}>
+                    {formatTimelineRange()}
                   </Text>
                 </View>
 
@@ -798,6 +918,23 @@ const styles = StyleSheet.create({
     color: "#0369a1",
     fontWeight: "500",
   },
+  timelineRangeInfo: {
+    backgroundColor: "#ecfdf5",
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  timelineRangeLabel: {
+    fontSize: 12,
+    color: "#047857",
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  timelineRangeValue: {
+    fontSize: 14,
+    color: "#047857",
+    fontWeight: "600",
+  },
   manualModeSection: {
     marginTop: 16,
     padding: 16,
@@ -822,6 +959,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#1e40af",
     fontWeight: "600",
+  },
+  rangeInfoBox: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: "#ecfdf5",
+    borderRadius: 6,
+  },
+  rangeInfoText: {
+    fontSize: 12,
+    color: "#047857",
+    textAlign: "center",
   },
   infoBox: {
     backgroundColor: "#dbeafe",
@@ -904,7 +1052,7 @@ const styles = StyleSheet.create({
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#f1f5f9",
@@ -913,11 +1061,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748b",
     fontWeight: "500",
+    flex: 1,
   },
   summaryValue: {
     fontSize: 14,
     color: "#1e293b",
     fontWeight: "600",
+    flex: 1.5,
+    textAlign: "right",
   },
   templateToggle: {
     backgroundColor: "#fff",
