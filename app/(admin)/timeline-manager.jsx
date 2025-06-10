@@ -16,6 +16,7 @@ import {
   getActiveTimeline,
   getTimelineTemplates,
   resetTimelinePayments,
+  deleteActiveTimeline,
 } from "../../services/timelineService";
 
 export default function TimelineManager() {
@@ -23,6 +24,7 @@ export default function TimelineManager() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -36,6 +38,8 @@ export default function TimelineManager() {
 
     if (timelineResult.success) {
       setActiveTimeline(timelineResult.timeline);
+    } else {
+      setActiveTimeline(null);
     }
 
     if (templatesResult.success) {
@@ -89,6 +93,45 @@ export default function TimelineManager() {
     );
   };
 
+  const handleDeleteTimeline = () => {
+    if (!activeTimeline) return;
+
+    Alert.alert(
+      "Hapus Timeline",
+      `Apakah Anda yakin ingin menghapus timeline "${activeTimeline.name}"?\n\nTindakan ini akan menghapus:\n• Timeline aktif\n• Semua data pembayaran\n• Semua data terkait\n\nTindakan ini TIDAK DAPAT dibatalkan!`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Ya, Hapus",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            const result = await deleteActiveTimeline();
+
+            if (result.success) {
+              Alert.alert(
+                "Timeline Dihapus",
+                "Timeline dan semua data pembayaran berhasil dihapus!",
+                [
+                  {
+                    text: "OK",
+                    onPress: () => {
+                      setActiveTimeline(null);
+                      loadData();
+                    },
+                  },
+                ]
+              );
+            } else {
+              Alert.alert("Error", result.error);
+            }
+            setDeleting(false);
+          },
+        },
+      ]
+    );
+  };
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -108,6 +151,12 @@ export default function TimelineManager() {
       default:
         return "Custom";
     }
+  };
+
+  const getActivePeriods = (timeline) => {
+    if (!timeline || !timeline.periods) return 0;
+    return Object.values(timeline.periods).filter((period) => period.active)
+      .length;
   };
 
   if (loading) {
@@ -147,17 +196,58 @@ export default function TimelineManager() {
 
           {activeTimeline ? (
             <View style={styles.timelineCard}>
-              <Text style={styles.timelineName}>{activeTimeline.name}</Text>
-              <Text style={styles.timelineType}>
-                {getTypeLabel(activeTimeline.type)} - {activeTimeline.duration}{" "}
-                periode
-              </Text>
-              <Text style={styles.timelineAmount}>
-                Total: {formatCurrency(activeTimeline.totalAmount)}
-              </Text>
-              <Text style={styles.timelineAmountPerPeriod}>
-                Per periode: {formatCurrency(activeTimeline.amountPerPeriod)}
-              </Text>
+              <View style={styles.timelineHeader}>
+                <Text style={styles.timelineName}>{activeTimeline.name}</Text>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>🟢 Aktif</Text>
+                </View>
+              </View>
+
+              <View style={styles.timelineDetails}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Tipe:</Text>
+                  <Text style={styles.detailValue}>
+                    {getTypeLabel(activeTimeline.type)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Total Periode:</Text>
+                  <Text style={styles.detailValue}>
+                    {activeTimeline.duration} periode
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Periode Aktif:</Text>
+                  <Text style={styles.detailValue}>
+                    {getActivePeriods(activeTimeline)} periode
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Total Amount:</Text>
+                  <Text style={styles.detailValue}>
+                    {formatCurrency(activeTimeline.totalAmount)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Per Periode:</Text>
+                  <Text style={styles.detailValue}>
+                    {formatCurrency(activeTimeline.amountPerPeriod)}
+                  </Text>
+                </View>
+
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Tanggal Mulai:</Text>
+                  <Text style={styles.detailValue}>
+                    {new Date(activeTimeline.startDate).toLocaleDateString(
+                      "id-ID"
+                    )}
+                  </Text>
+                </View>
+              </View>
 
               <View style={styles.timelineActions}>
                 <Button
@@ -165,22 +255,34 @@ export default function TimelineManager() {
                   onPress={handleManagePayments}
                   style={styles.manageButton}
                 />
-                <Button
-                  title={resetting ? "Mereset..." : "Reset Pembayaran"}
-                  onPress={handleResetPayments}
-                  variant="outline"
-                  style={styles.resetButton}
-                  disabled={resetting}
-                />
+
+                <View style={styles.dangerActions}>
+                  <Button
+                    title={resetting ? "Mereset..." : "Reset Pembayaran"}
+                    onPress={handleResetPayments}
+                    variant="outline"
+                    style={styles.resetButton}
+                    disabled={resetting || deleting}
+                  />
+
+                  <Button
+                    title={deleting ? "Menghapus..." : "🗑️ Hapus Timeline"}
+                    onPress={handleDeleteTimeline}
+                    variant="outline"
+                    style={styles.deleteButton}
+                    disabled={resetting || deleting}
+                  />
+                </View>
               </View>
             </View>
           ) : (
             <View style={styles.noTimelineCard}>
+              <Text style={styles.noTimelineIcon}>📅</Text>
               <Text style={styles.noTimelineText}>
                 Belum ada timeline aktif
               </Text>
               <Text style={styles.noTimelineDesc}>
-                Buat timeline baru untuk mulai mengelola pembayaran
+                Buat timeline baru untuk mulai mengelola pembayaran bisyaroh
               </Text>
             </View>
           )}
@@ -188,10 +290,20 @@ export default function TimelineManager() {
 
         <View style={styles.actionsSection}>
           <Button
-            title="Buat Timeline Baru"
+            title={
+              activeTimeline ? "Buat Timeline Baru" : "Buat Timeline Pertama"
+            }
             onPress={handleCreateTimeline}
             style={styles.createButton}
           />
+
+          {activeTimeline && (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningText}>
+                ⚠️ Membuat timeline baru akan mengganti timeline aktif saat ini
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.templatesSection}>
@@ -200,25 +312,37 @@ export default function TimelineManager() {
           {templates.length > 0 ? (
             templates.map((template) => (
               <View key={template.id} style={styles.templateCard}>
-                <Text style={styles.templateName}>{template.name}</Text>
-                <Text style={styles.templateType}>
-                  {getTypeLabel(template.type)} - {template.duration} periode
-                </Text>
-                <Text style={styles.templateAmount}>
-                  Base: {formatCurrency(template.baseAmount)}
-                </Text>
-                {template.holidays && template.holidays.length > 0 && (
-                  <Text style={styles.templateHolidays}>
-                    Libur: {template.holidays.length} periode
+                <View style={styles.templateHeader}>
+                  <Text style={styles.templateName}>{template.name}</Text>
+                  <Text style={styles.templateDate}>
+                    {new Date(template.createdAt?.toDate()).toLocaleDateString(
+                      "id-ID"
+                    )}
                   </Text>
-                )}
+                </View>
+
+                <View style={styles.templateDetails}>
+                  <Text style={styles.templateType}>
+                    {getTypeLabel(template.type)} - {template.duration} periode
+                  </Text>
+                  <Text style={styles.templateAmount}>
+                    Base: {formatCurrency(template.baseAmount)}
+                  </Text>
+                  {template.holidays && template.holidays.length > 0 && (
+                    <Text style={styles.templateHolidays}>
+                      Libur: {template.holidays.length} periode
+                    </Text>
+                  )}
+                </View>
               </View>
             ))
           ) : (
             <View style={styles.noTemplatesCard}>
+              <Text style={styles.noTemplatesIcon}>📋</Text>
               <Text style={styles.noTemplatesText}>Belum ada template</Text>
               <Text style={styles.noTemplatesDesc}>
-                Template akan tersimpan saat Anda membuat timeline
+                Template akan tersimpan saat Anda membuat timeline dan memilih
+                opsi "Simpan sebagai template"
               </Text>
             </View>
           )}
@@ -276,61 +400,93 @@ const styles = StyleSheet.create({
   },
   timelineCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 20,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  timelineName: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#1e293b",
-    marginBottom: 8,
-  },
-  timelineType: {
-    fontSize: 14,
-    color: "#64748b",
-    marginBottom: 4,
-  },
-  timelineAmount: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#059669",
-    marginBottom: 4,
-  },
-  timelineAmountPerPeriod: {
-    fontSize: 14,
-    color: "#64748b",
+  timelineHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
-  timelineActions: {
+  timelineName: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1e293b",
+    flex: 1,
+  },
+  statusBadge: {
+    backgroundColor: "#dcfce7",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#16a34a",
+  },
+  timelineDetails: {
+    marginBottom: 20,
+  },
+  detailRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: "#64748b",
+    fontWeight: "500",
+  },
+  detailValue: {
+    fontSize: 14,
+    color: "#1e293b",
+    fontWeight: "600",
+  },
+  timelineActions: {
     gap: 12,
   },
   manageButton: {
-    flex: 1,
     backgroundColor: "#3b82f6",
   },
+  dangerActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
   resetButton: {
+    flex: 1,
+    borderColor: "#f59e0b",
+  },
+  deleteButton: {
     flex: 1,
     borderColor: "#ef4444",
   },
   noTimelineCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 32,
+    borderRadius: 16,
+    padding: 40,
     borderWidth: 1,
     borderColor: "#e2e8f0",
     alignItems: "center",
   },
+  noTimelineIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
   noTimelineText: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 18,
+    fontWeight: "600",
     color: "#64748b",
     marginBottom: 8,
     textAlign: "center",
@@ -346,6 +502,20 @@ const styles = StyleSheet.create({
   },
   createButton: {
     backgroundColor: "#10b981",
+    marginBottom: 12,
+  },
+  warningBox: {
+    backgroundColor: "#fef3c7",
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#f59e0b",
+  },
+  warningText: {
+    fontSize: 14,
+    color: "#92400e",
+    textAlign: "center",
+    lineHeight: 18,
   },
   templatesSection: {
     marginBottom: 32,
@@ -357,22 +527,39 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  templateHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
   },
   templateName: {
     fontSize: 16,
     fontWeight: "600",
     color: "#1e293b",
-    marginBottom: 4,
+    flex: 1,
+  },
+  templateDate: {
+    fontSize: 12,
+    color: "#94a3b8",
+  },
+  templateDetails: {
+    gap: 4,
   },
   templateType: {
     fontSize: 14,
     color: "#64748b",
-    marginBottom: 4,
   },
   templateAmount: {
     fontSize: 14,
     color: "#059669",
-    marginBottom: 4,
+    fontWeight: "500",
   },
   templateHolidays: {
     fontSize: 12,
@@ -385,6 +572,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e2e8f0",
     alignItems: "center",
+  },
+  noTemplatesIcon: {
+    fontSize: 32,
+    marginBottom: 12,
   },
   noTemplatesText: {
     fontSize: 16,

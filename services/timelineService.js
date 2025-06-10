@@ -113,6 +113,36 @@ export const getActiveTimeline = async () => {
   }
 };
 
+export const deleteActiveTimeline = async () => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const timelineResult = await getActiveTimeline();
+    if (!timelineResult.success) {
+      throw new Error('Timeline aktif tidak ditemukan');
+    }
+
+    const timeline = timelineResult.timeline;
+    const batch = writeBatch(db);
+
+    Object.keys(timeline.periods).forEach(periodKey => {
+      const periodRef = doc(db, 'payments', timeline.id, 'periods', periodKey);
+      batch.delete(periodRef);
+    });
+
+    const timelineRef = doc(db, 'active_timeline', 'current');
+    batch.delete(timelineRef);
+
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting active timeline:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export const generatePaymentsForTimeline = async (timelineId) => {
   try {
     if (!db) {

@@ -10,16 +10,21 @@ import { getActiveTimeline } from './timelineService';
 export const getWaliPaymentHistory = async (santriId) => {
   try {
     if (!db) {
-      return { success: true, payments: [] };
+      return { success: true, payments: [], timeline: null };
     }
 
     if (!santriId) {
-      return { success: false, error: 'Santri ID tidak ditemukan', payments: [] };
+      return { success: false, error: 'Santri ID tidak ditemukan', payments: [], timeline: null };
     }
 
     const timelineResult = await getActiveTimeline();
     if (!timelineResult.success) {
-      return { success: false, error: 'Timeline aktif tidak ditemukan', payments: [] };
+      return { 
+        success: false, 
+        error: 'Timeline aktif tidak ditemukan', 
+        payments: [], 
+        timeline: null 
+      };
     }
 
     const timeline = timelineResult.timeline;
@@ -41,17 +46,50 @@ export const getWaliPaymentHistory = async (santriId) => {
           const q = query(paymentsRef, where('santriId', '==', santriId));
           const querySnapshot = await getDocs(q);
           
-          querySnapshot.forEach((doc) => {
-            const paymentData = doc.data();
+          if (querySnapshot.empty) {
             allPayments.push({
-              id: doc.id,
-              ...paymentData,
+              id: `${santriId}_${periodKey}`,
+              santriId: santriId,
+              period: periodKey,
+              periodLabel: period.label,
+              amount: period.amount,
+              status: 'belum_bayar',
+              paymentDate: null,
+              paymentMethod: null,
+              notes: '',
               periodData: period,
-              periodKey: periodKey
+              periodKey: periodKey,
+              createdAt: new Date(),
+              updatedAt: new Date()
             });
-          });
+          } else {
+            querySnapshot.forEach((doc) => {
+              const paymentData = doc.data();
+              allPayments.push({
+                id: doc.id,
+                ...paymentData,
+                periodData: period,
+                periodKey: periodKey
+              });
+            });
+          }
         } catch (periodError) {
           console.warn(`Error loading period ${periodKey}:`, periodError);
+          allPayments.push({
+            id: `${santriId}_${periodKey}`,
+            santriId: santriId,
+            period: periodKey,
+            periodLabel: period.label,
+            amount: period.amount,
+            status: 'belum_bayar',
+            paymentDate: null,
+            paymentMethod: null,
+            notes: '',
+            periodData: period,
+            periodKey: periodKey,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
         }
       }
     }
@@ -65,7 +103,7 @@ export const getWaliPaymentHistory = async (santriId) => {
     return { success: true, payments: allPayments, timeline };
   } catch (error) {
     console.error('Error getting wali payment history:', error);
-    return { success: false, error: error.message, payments: [] };
+    return { success: false, error: error.message, payments: [], timeline: null };
   }
 };
 
