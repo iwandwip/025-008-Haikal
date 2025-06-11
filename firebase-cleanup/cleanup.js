@@ -2,7 +2,7 @@ const admin = require("firebase-admin");
 
 let inquirer;
 (async () => {
-  inquirer = await import('inquirer');
+  inquirer = (await import('inquirer')).default;
 })();
 
 const serviceAccount = require("./serviceAccountKey.json");
@@ -269,45 +269,25 @@ async function deleteFirestoreData(relatedData) {
   }
 }
 
-async function main() {
-  if (!inquirer) {
-    inquirer = await import('inquirer');
-  }
+async function handleDryRun() {
+  const deleteOptions = ['auth', 'firestore'];
+  await showDryRun(deleteOptions);
+  console.log('✅ Dry run selesai. Tidak ada data yang dihapus.');
   
-  console.log('🔥 Firebase User Cleanup Tool');
-  console.log('=============================\n');
-  
-  const { operation } = await inquirer.default.prompt([
-    {
-      type: 'list',
-      name: 'operation',
-      message: 'Pilih operasi yang ingin dilakukan:',
-      choices: [
-        { name: '🔍 Dry Run Only (Lihat data saja)', value: 'dry-run' },
-        { name: '📧 Hapus Auth Users saja', value: 'auth-only' },
-        { name: '🗃️  Hapus Firestore Data saja', value: 'firestore-only' },
-        { name: '💥 Hapus Keduanya (Auth + Firestore)', value: 'both' },
-        { name: '❌ Cancel', value: 'cancel' }
-      ]
-    }
-  ]);
-  
-  if (operation === 'cancel') {
-    console.log('Operasi dibatalkan.');
-    return;
-  }
-  
+  console.log('\nTekan Enter untuk kembali ke menu...');
+  await inquirer.prompt([{
+    type: 'input',
+    name: 'continue',
+    message: ''
+  }]);
+}
+
+async function handleDeleteOperation(operation) {
   const deleteOptions = [];
   if (operation === 'auth-only' || operation === 'both') deleteOptions.push('auth');
   if (operation === 'firestore-only' || operation === 'both') deleteOptions.push('firestore');
-  if (operation === 'dry-run') deleteOptions.push('auth', 'firestore');
   
   const { authUsers, relatedData } = await showDryRun(deleteOptions);
-  
-  if (operation === 'dry-run') {
-    console.log('✅ Dry run selesai. Tidak ada data yang dihapus.');
-    return;
-  }
   
   const totalItems = (authUsers?.length || 0) + 
                    (relatedData?.users?.length || 0) + 
@@ -317,6 +297,12 @@ async function main() {
   
   if (totalItems === 0) {
     console.log('✅ Tidak ada data yang perlu dihapus.');
+    console.log('\nTekan Enter untuk kembali ke menu...');
+    await inquirer.prompt([{
+      type: 'input',
+      name: 'continue',
+      message: ''
+    }]);
     return;
   }
   
@@ -324,7 +310,7 @@ async function main() {
   console.log('⚠️  PERINGATAN: Operasi ini TIDAK DAPAT DIBATALKAN!');
   console.log('='.repeat(60));
   
-  const { confirmDelete } = await inquirer.default.prompt([
+  const { confirmDelete } = await inquirer.prompt([
     {
       type: 'confirm',
       name: 'confirmDelete',
@@ -335,10 +321,16 @@ async function main() {
   
   if (!confirmDelete) {
     console.log('Operasi dibatalkan.');
+    console.log('\nTekan Enter untuk kembali ke menu...');
+    await inquirer.prompt([{
+      type: 'input',
+      name: 'continue',
+      message: ''
+    }]);
     return;
   }
   
-  const { finalConfirm } = await inquirer.default.prompt([
+  const { finalConfirm } = await inquirer.prompt([
     {
       type: 'input',
       name: 'finalConfirm',
@@ -373,6 +365,77 @@ async function main() {
   console.log(`✅ Total berhasil: ${totalSuccess}`);
   console.log(`❌ Total error: ${totalErrors}`);
   console.log('='.repeat(40));
+  
+  console.log('\nTekan Enter untuk kembali ke menu...');
+  await inquirer.prompt([{
+    type: 'input',
+    name: 'continue',
+    message: ''
+  }]);
 }
+
+async function showMainMenu() {
+  if (!inquirer) {
+    inquirer = (await import('inquirer')).default;
+  }
+  
+  console.clear();
+  console.log('🔥 Firebase User Cleanup Tool');
+  console.log('=============================\n');
+  
+  const { operation } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'operation',
+      message: 'Pilih operasi yang ingin dilakukan:',
+      choices: [
+        { name: '🔍 Dry Run Only (Lihat data saja)', value: 'dry-run' },
+        { name: '📧 Hapus Auth Users saja', value: 'auth-only' },
+        { name: '🗃️  Hapus Firestore Data saja', value: 'firestore-only' },
+        { name: '💥 Hapus Keduanya (Auth + Firestore)', value: 'both' },
+        { name: '─────────────────────────', disabled: true },
+        { name: '❌ Keluar', value: 'exit' }
+      ]
+    }
+  ]);
+  
+  return operation;
+}
+
+async function main() {
+  if (!inquirer) {
+    inquirer = (await import('inquirer')).default;
+  }
+  
+  try {
+    while (true) {
+      const operation = await showMainMenu();
+      
+      if (operation === 'exit') {
+        console.log('\n👋 Terima kasih! Sampai jumpa lagi.');
+        break;
+      }
+      
+      if (operation === 'dry-run') {
+        await handleDryRun();
+      } else {
+        await handleDeleteOperation(operation);
+      }
+    }
+  } catch (error) {
+    if (error.isTtyError || error.message.includes('User force closed')) {
+      console.log('\n\n👋 Program dihentikan oleh user. Sampai jumpa!');
+    } else {
+      console.error('\n❌ Error:', error.message);
+    }
+  }
+  
+  process.exit(0);
+}
+
+process.on('SIGINT', () => {
+  console.log('\n\n👋 Program dihentikan oleh user (Ctrl+C). Sampai jumpa!');
+  process.exit(0);
+});
 
 main().catch(console.error);
