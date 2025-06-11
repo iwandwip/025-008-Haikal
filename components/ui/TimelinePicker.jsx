@@ -216,6 +216,20 @@ const TimelinePicker = ({
     return [...new Set(minutesForDateHour)].sort((a, b) => a - b);
   };
 
+  const isValidHourForDate = (targetDate, targetHour) => {
+    if (!isSimulationMode()) return true;
+
+    const validHours = getValidHoursForDate(targetDate);
+    return validHours && validHours.includes(targetHour);
+  };
+
+  const isValidMinuteForDateHour = (targetDate, targetHour, targetMinute) => {
+    if (!isSimulationMode()) return true;
+
+    const validMinutes = getValidMinutesForDateHour(targetDate, targetHour);
+    return validMinutes && validMinutes.includes(targetMinute);
+  };
+
   const getValidRange = (level) => {
     const current = new Date(selectedDate);
 
@@ -458,6 +472,30 @@ const TimelinePicker = ({
     return testDate >= min && testDate <= max;
   };
 
+  const findValidTimeForSelection = (newDate, level, value) => {
+    if (!isSimulationMode()) return newDate;
+
+    if (level === "hour") {
+      const validMinutes = getValidMinutesForDateHour(newDate, value);
+      if (validMinutes && validMinutes.length > 0) {
+        newDate.setMinutes(validMinutes[0]);
+        newDate.setSeconds(0, 0);
+      }
+    } else if (level === "day") {
+      const validHours = getValidHoursForDate(newDate);
+      if (validHours && validHours.length > 0) {
+        newDate.setHours(validHours[0]);
+        const validMinutes = getValidMinutesForDateHour(newDate, validHours[0]);
+        if (validMinutes && validMinutes.length > 0) {
+          newDate.setMinutes(validMinutes[0]);
+          newDate.setSeconds(0, 0);
+        }
+      }
+    }
+
+    return newDate;
+  };
+
   const setValue = (level, value) => {
     const newDate = new Date(selectedDate);
     let updated = false;
@@ -493,10 +531,19 @@ const TimelinePicker = ({
         updated = true;
         break;
       case "hour":
+        if (isSimulationMode() && !isValidHourForDate(newDate, value)) {
+          return;
+        }
         newDate.setHours(value);
         updated = true;
         break;
       case "minute":
+        if (
+          isSimulationMode() &&
+          !isValidMinuteForDateHour(newDate, newDate.getHours(), value)
+        ) {
+          return;
+        }
         newDate.setMinutes(value);
         updated = true;
         break;
@@ -504,8 +551,9 @@ const TimelinePicker = ({
 
     if (updated) {
       if (isSimulationMode()) {
-        if (isValidDateTime(newDate)) {
-          setSelectedDate(newDate);
+        const adjustedDate = findValidTimeForSelection(newDate, level, value);
+        if (isValidDateTime(adjustedDate)) {
+          setSelectedDate(adjustedDate);
         }
       } else {
         setSelectedDate(newDate);
