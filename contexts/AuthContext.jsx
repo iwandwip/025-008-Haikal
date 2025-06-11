@@ -2,6 +2,7 @@ import React, { createContext, useState, useContext, useEffect } from "react";
 import { auth } from "../services/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { getUserProfile } from "../services/userService";
+import { paymentStatusManager } from "../services/paymentStatusManager";
 
 const AuthContext = createContext({});
 
@@ -48,6 +49,23 @@ export const AuthProvider = ({ children }) => {
         const adminStatus = checkAdminStatus(user, result.profile);
         setIsAdmin(adminStatus);
         setUserProfile(result.profile);
+
+        if (!adminStatus && result.profile.role === "user") {
+          try {
+            await paymentStatusManager.handleUserLogin(user.uid);
+          } catch (error) {
+            console.warn("Error during payment status update on login:", error);
+          }
+        } else if (adminStatus) {
+          try {
+            await paymentStatusManager.handleUserLogin(null);
+          } catch (error) {
+            console.warn(
+              "Error during admin payment status update on login:",
+              error
+            );
+          }
+        }
       } else {
         const adminStatus = checkAdminStatus(user, null);
         setIsAdmin(adminStatus);
@@ -60,6 +78,15 @@ export const AuthProvider = ({ children }) => {
             role: "admin",
             isAdmin: true,
           });
+
+          try {
+            await paymentStatusManager.handleUserLogin(null);
+          } catch (error) {
+            console.warn(
+              "Error during admin payment status update on login:",
+              error
+            );
+          }
         } else {
           console.warn("Failed to load user profile:", result.error);
           setUserProfile(null);

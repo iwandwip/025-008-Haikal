@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,18 +6,36 @@ import {
   SafeAreaView,
   Alert,
   TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import Button from "../../components/ui/Button";
 import { signOutUser } from "../../services/authService";
+import { seederService } from "../../services/seederService";
 
 function AdminHome() {
   const { currentUser, userProfile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [seederLoading, setSeederLoading] = useState(false);
+  const [seederStats, setSeederStats] = useState({ total: 0, seederUsers: 0 });
+
+  useEffect(() => {
+    loadSeederStats();
+  }, []);
+
+  const loadSeederStats = async () => {
+    try {
+      const stats = await seederService.getSeederStats();
+      setSeederStats(stats);
+    } catch (error) {
+      console.error("Error loading seeder stats:", error);
+    }
+  };
 
   const handleLogout = async () => {
     Alert.alert("Konfirmasi Logout", "Apakah Anda yakin ingin keluar?", [
@@ -39,6 +57,56 @@ function AdminHome() {
     ]);
   };
 
+  const handleSeeder = async () => {
+    Alert.alert(
+      "Generate Data Santri",
+      "Akan membuat 3 akun wali santri baru dengan data random. Lanjutkan?",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Generate",
+          onPress: async () => {
+            setSeederLoading(true);
+
+            try {
+              const result = await seederService.createSeederUsers(3);
+
+              if (result.success) {
+                await loadSeederStats();
+
+                let message = `✅ Berhasil membuat ${result.totalCreated} akun santri!\n\n`;
+
+                result.created.forEach((user, index) => {
+                  message += `${index + 1}. ${user.namaSantri}\n`;
+                  message += `   Email: ${user.email}\n`;
+                  message += `   Wali: ${user.namaWali}\n`;
+                  message += `   RFID: ${user.rfidSantri}\n\n`;
+                });
+
+                message += `Password semua akun: admin123`;
+
+                if (result.totalErrors > 0) {
+                  message += `\n\n⚠️ ${result.totalErrors} akun gagal dibuat`;
+                }
+
+                Alert.alert("Seeder Berhasil", message);
+              } else {
+                Alert.alert(
+                  "Seeder Gagal",
+                  result.error || "Terjadi kesalahan saat generate data"
+                );
+              }
+            } catch (error) {
+              Alert.alert("Error", "Terjadi kesalahan: " + error.message);
+            } finally {
+              setSeederLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleTambahSantri = () => {
     router.push("/(admin)/tambah-santri");
   };
@@ -57,7 +125,14 @@ function AdminHome() {
 
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 40 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerSection}>
           <Text style={styles.title}>Dashboard Admin</Text>
           <Text style={styles.subtitle}>TPQ Ibadurrohman</Text>
@@ -144,6 +219,48 @@ function AdminHome() {
               <Text style={styles.arrowText}>→</Text>
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.menuCard,
+              styles.seederCard,
+              seederLoading && styles.seederCardLoading,
+            ]}
+            onPress={handleSeeder}
+            activeOpacity={0.8}
+            disabled={seederLoading}
+          >
+            <View style={styles.menuIcon}>
+              {seederLoading ? (
+                <ActivityIndicator size={24} color="#ef4444" />
+              ) : (
+                <Text style={styles.menuIconText}>🎲</Text>
+              )}
+            </View>
+            <View style={styles.menuContent}>
+              <Text style={styles.menuTitle}>
+                {seederLoading ? "Generating Data..." : "Generate Data Santri"}
+              </Text>
+              <Text style={styles.menuDesc}>
+                {seederLoading
+                  ? "Sedang membuat 3 akun santri dengan data random..."
+                  : "Buat 3 akun santri dengan data random untuk testing"}
+              </Text>
+              <View style={styles.seederStats}>
+                <Text style={styles.seederStatsText}>
+                  Total Santri: {seederStats.total} | Generated:{" "}
+                  {seederStats.seederUsers}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.menuArrow}>
+              <Text
+                style={[styles.arrowText, seederLoading && { opacity: 0.5 }]}
+              >
+                {seederLoading ? "⏳" : "→"}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.logoutSection}>
@@ -155,7 +272,20 @@ function AdminHome() {
             style={styles.logoutButton}
           />
         </View>
-      </View>
+      </ScrollView>
+
+      {seederLoading && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingModal}>
+            <ActivityIndicator size="large" color="#ef4444" />
+            <Text style={styles.loadingTitle}>Generating Data Santri</Text>
+            <Text style={styles.loadingSubtitle}>
+              Membuat 3 akun dengan data random...
+            </Text>
+            <Text style={styles.loadingNote}>Mohon tunggu sebentar</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -167,6 +297,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 40,
   },
@@ -191,9 +323,8 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   menuSection: {
-    flex: 1,
-    justifyContent: "center",
     gap: 16,
+    marginBottom: 40,
   },
   menuCard: {
     flexDirection: "row",
@@ -220,6 +351,15 @@ const styles = StyleSheet.create({
   quaternaryCard: {
     borderColor: "#8b5cf6",
   },
+  seederCard: {
+    borderColor: "#ef4444",
+    backgroundColor: "#fef2f2",
+  },
+  seederCardLoading: {
+    opacity: 0.7,
+    borderColor: "#f97316",
+    backgroundColor: "#fff7ed",
+  },
   menuIcon: {
     width: 60,
     height: 60,
@@ -245,6 +385,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#64748b",
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  seederStats: {
+    marginTop: 4,
+  },
+  seederStatsText: {
+    fontSize: 12,
+    color: "#ef4444",
+    fontWeight: "500",
   },
   menuArrow: {
     marginLeft: 12,
@@ -255,9 +404,54 @@ const styles = StyleSheet.create({
   },
   logoutSection: {
     marginTop: 20,
+    marginBottom: 20,
   },
   logoutButton: {
     borderColor: "#ef4444",
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+  },
+  loadingModal: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 32,
+    alignItems: "center",
+    minWidth: 280,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  loadingTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginTop: 16,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  loadingSubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  loadingNote: {
+    fontSize: 12,
+    color: "#ef4444",
+    textAlign: "center",
+    fontWeight: "500",
   },
 });
 

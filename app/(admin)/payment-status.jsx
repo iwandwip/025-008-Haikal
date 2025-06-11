@@ -9,15 +9,20 @@ import {
   RefreshControl,
   TextInput,
   ActivityIndicator,
+  AppState,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSettings } from "../../contexts/SettingsContext";
+import { useNotification } from "../../contexts/NotificationContext";
 import { getColors } from "../../constants/Colors";
+import { paymentStatusManager } from "../../services/paymentStatusManager";
 import { getAllUsersPaymentStatus } from "../../services/adminPaymentService";
 
 function PaymentStatus() {
   const { theme, loading: settingsLoading } = useSettings();
+  const { showUpdateNotification, showErrorNotification } = useNotification();
   const colors = getColors(theme);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -27,18 +32,27 @@ function PaymentStatus() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const loadData = useCallback(async (isRefresh = false) => {
+  const loadData = useCallback(async (isRefresh = false, useCache = true) => {
     try {
       if (!isRefresh) setLoading(true);
 
-      const result = await getAllUsersPaymentStatus();
+      const result = await paymentStatusManager.updateAllUsersPaymentStatus(
+        !useCache,
+        isRefresh ? "manual_refresh" : "page_load"
+      );
 
-      if (result.success) {
-        setUsers(result.users);
-        setTimeline(result.timeline);
+      if (result.success && result.data) {
+        setUsers(result.data.users || []);
+        setTimeline(result.data.timeline);
       } else {
-        setUsers([]);
-        setTimeline(null);
+        const fallbackResult = await getAllUsersPaymentStatus();
+        if (fallbackResult.success) {
+          setUsers(fallbackResult.users);
+          setTimeline(fallbackResult.timeline);
+        } else {
+          setUsers([]);
+          setTimeline(null);
+        }
       }
     } catch (error) {
       console.error("Error loading payment status:", error);
@@ -49,17 +63,48 @@ function PaymentStatus() {
     }
   }, []);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData(true, false);
+    setRefreshing(false);
+  }, [loadData]);
+
   useEffect(() => {
     if (!settingsLoading) {
-      loadData();
+      loadData(false, true);
     }
   }, [loadData, settingsLoading]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadData(true);
-    setRefreshing(false);
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      paymentStatusManager.handlePageNavigation("admin-payment-status");
+    }, [])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      paymentStatusManager.handleAppStateChange(nextAppState);
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+    return () => subscription?.remove();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = paymentStatusManager.addListener((type, data) => {
+      if (type === "all_users_updated") {
+        if (data.data.success) {
+          setUsers(data.data.users || []);
+          setTimeline(data.data.timeline);
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   const filteredUsers = useMemo(() => {
     if (!searchQuery.trim()) {

@@ -9,12 +9,16 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  AppState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
+import { useNotification } from "../../contexts/NotificationContext";
 import { getColors } from "../../constants/Colors";
 import PaymentModal from "../../components/ui/PaymentModal";
+import { paymentStatusManager } from "../../services/paymentStatusManager";
 import {
   getWaliPaymentHistory,
   getPaymentSummary,
@@ -24,6 +28,8 @@ import {
 function StatusPembayaran() {
   const { userProfile } = useAuth();
   const { theme, loading: settingsLoading } = useSettings();
+  const { showPaymentSuccessNotification, showErrorNotification } =
+    useNotification();
   const colors = getColors(theme);
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
@@ -36,7 +42,7 @@ function StatusPembayaran() {
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
   const loadData = useCallback(
-    async (isRefresh = false) => {
+    async (isRefresh = false, useCache = true) => {
       try {
         if (!userProfile?.id) {
           setPayments([]);
@@ -48,16 +54,27 @@ function StatusPembayaran() {
 
         if (!isRefresh) setLoading(true);
 
-        const result = await getWaliPaymentHistory(userProfile.id);
+        const result = await paymentStatusManager.updateUserPaymentStatus(
+          userProfile.id,
+          !useCache,
+          isRefresh ? "manual_refresh" : "page_load"
+        );
 
-        if (result.success) {
-          setPayments(result.payments);
-          setTimeline(result.timeline);
-          setSummary(getPaymentSummary(result.payments));
+        if (result.success && result.data) {
+          setPayments(result.data.payments || []);
+          setTimeline(result.data.timeline);
+          setSummary(getPaymentSummary(result.data.payments || []));
         } else {
-          setPayments([]);
-          setSummary(null);
-          setTimeline(null);
+          const fallbackResult = await getWaliPaymentHistory(userProfile.id);
+          if (fallbackResult.success) {
+            setPayments(fallbackResult.payments);
+            setTimeline(fallbackResult.timeline);
+            setSummary(getPaymentSummary(fallbackResult.payments));
+          } else {
+            setPayments([]);
+            setSummary(null);
+            setTimeline(null);
+          }
         }
       } catch (error) {
         console.error("Error loading payment data:", error);
@@ -71,17 +88,52 @@ function StatusPembayaran() {
     [userProfile?.id]
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadData(true, false);
+    setRefreshing(false);
+  }, [loadData]);
+
   useEffect(() => {
     if (!settingsLoading) {
-      loadData();
+      loadData(false, true);
     }
   }, [loadData, settingsLoading]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadData(true);
-    setRefreshing(false);
-  }, [loadData]);
+  useFocusEffect(
+    useCallback(() => {
+      paymentStatusManager.handlePageNavigation(
+        "payment-status",
+        userProfile?.id
+      );
+    }, [userProfile?.id])
+  );
+
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      paymentStatusManager.handleAppStateChange(nextAppState, userProfile?.id);
+    };
+
+    const subscription = AppState.addEventListener(
+      "change",
+      handleAppStateChange
+    );
+    return () => subscription?.remove();
+  }, [userProfile?.id]);
+
+  useEffect(() => {
+    const unsubscribe = paymentStatusManager.addListener((type, data) => {
+      if (type === "user_payment_updated" && data.userId === userProfile?.id) {
+        if (data.data.success) {
+          setPayments(data.data.payments || []);
+          setTimeline(data.data.timeline);
+          setSummary(getPaymentSummary(data.data.payments || []));
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [userProfile?.id]);
 
   const handlePayNow = useCallback((payment) => {
     setSelectedPayment(payment);
@@ -106,26 +158,29 @@ function StatusPembayaran() {
         );
 
         if (result.success) {
-          await loadData(true);
-          Alert.alert(
-            "Pembayaran Berhasil! 🎉",
-            `Pembayaran ${payment.periodData?.label} telah berhasil diproses.`,
-            [{ text: "OK" }]
-          );
+          await loadData(true, false);
+          showPaymentSuccessNotification(payment);
+
+          paymentStatusManager.clearUserCache(userProfile.id);
         } else {
-          Alert.alert(
-            "Error",
+          showErrorNotification(
             "Gagal memperbarui status pembayaran: " + result.error
           );
         }
       } catch (error) {
-        Alert.alert("Error", "Terjadi kesalahan saat memperbarui pembayaran");
+        showErrorNotification("Terjadi kesalahan saat memperbarui pembayaran");
         console.error("Error updating payment:", error);
       }
 
       setUpdatingPayment(false);
     },
-    [timeline?.id, userProfile?.id, loadData]
+    [
+      timeline?.id,
+      userProfile?.id,
+      loadData,
+      showPaymentSuccessNotification,
+      showErrorNotification,
+    ]
   );
 
   const getStatusColor = useCallback(
