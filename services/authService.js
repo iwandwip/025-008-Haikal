@@ -23,6 +23,35 @@ const handleAuthError = (error) => {
   return errorMessages[error.code] || `Error: ${error.message}`;
 };
 
+export const checkEmailExists = async (email) => {
+  try {
+    const apiKey = "AIzaSyDXKj-ZsNWqkwxvB7iYMgSzXKY1WmUkutw";
+    
+    const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:createAuthUri?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        identifier: email,
+        continueUri: 'http://localhost'
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { success: false, error: data.error?.message || 'Error checking email' };
+    }
+
+    const emailExists = data.registered === true;
+    return { success: true, exists: emailExists };
+  } catch (error) {
+    console.error('Error checking email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export const signInWithEmail = async (email, password) => {
   try {
     if (!auth) {

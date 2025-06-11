@@ -6,6 +6,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { signUpWithEmail } from './authService';
+import { checkEmailExists } from './authService';
 
 class SeederService {
   constructor() {
@@ -48,70 +49,73 @@ class SeederService {
     return nameList[Math.floor(Math.random() * nameList.length)];
   }
 
-  async getNextUserNumber() {
-    try {
-      if (!db) {
-        return 1;
-      }
+  generateRandomUserNumber() {
+    return Math.floor(Math.random() * 9000) + 1000;
+  }
 
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('role', '==', 'user'));
+  async generateUniqueEmail() {
+    const maxRetries = 100;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const userNumber = this.generateRandomUserNumber();
+      const email = `user${userNumber}@gmail.com`;
       
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        return 1;
-      }
-
-      let maxUserNumber = 0;
-      
-      querySnapshot.forEach((doc) => {
-        const userData = doc.data();
-        const email = userData.email;
+      try {
+        const emailCheck = await checkEmailExists(email);
         
-        if (email && email.includes('@gmail.com')) {
-          const emailMatch = email.match(/user(\d+)@gmail\.com/);
-          if (emailMatch) {
-            const userNumber = parseInt(emailMatch[1]);
-            if (userNumber > maxUserNumber) {
-              maxUserNumber = userNumber;
-            }
-          }
+        if (emailCheck.success && !emailCheck.exists) {
+          return { success: true, email: email, userNumber: userNumber };
         }
-      });
-      
-      return maxUserNumber + 1;
-    } catch (error) {
-      console.error('Error getting next user number:', error);
-      return 1;
+        
+        if (!emailCheck.success) {
+          console.warn(`Error checking email ${email}:`, emailCheck.error);
+        }
+        
+      } catch (error) {
+        console.warn(`Error on attempt ${attempt + 1} for email ${email}:`, error);
+      }
     }
+    
+    return { 
+      success: false, 
+      error: `Tidak dapat menemukan email unik setelah ${maxRetries} percobaan`
+    };
   }
 
   async createSeederUsers(count = 3) {
     try {
-      const startUserNumber = await this.getNextUserNumber();
       const results = [];
       const errors = [];
 
       for (let i = 0; i < count; i++) {
-        const userNumber = startUserNumber + i;
-        const email = `user${userNumber}@gmail.com`;
-        const password = 'admin123';
-        
-        const profileData = {
-          namaSantri: this.getRandomName(this.namaSantriList),
-          namaWali: this.getRandomName(this.namaWaliList),
-          noHpWali: this.generateRandomPhone(),
-          rfidSantri: this.generateRandomRFID(),
-          role: 'user'
-        };
-
         try {
+          const emailResult = await this.generateUniqueEmail();
+          
+          if (!emailResult.success) {
+            errors.push({
+              index: i + 1,
+              error: emailResult.error
+            });
+            continue;
+          }
+
+          const email = emailResult.email;
+          const password = 'admin123';
+          
+          const profileData = {
+            namaSantri: this.getRandomName(this.namaSantriList),
+            namaWali: this.getRandomName(this.namaWaliList),
+            noHpWali: this.generateRandomPhone(),
+            rfidSantri: this.generateRandomRFID(),
+            role: 'user'
+          };
+
           const result = await signUpWithEmail(email, password, profileData);
           
           if (result.success) {
             results.push({
               email,
+              userNumber: emailResult.userNumber,
               namaSantri: profileData.namaSantri,
               namaWali: profileData.namaWali,
               rfidSantri: profileData.rfidSantri,
@@ -120,17 +124,18 @@ class SeederService {
           } else {
             errors.push({
               email,
+              userNumber: emailResult.userNumber,
               error: result.error
             });
           }
         } catch (error) {
           errors.push({
-            email,
+            index: i + 1,
             error: error.message
           });
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       return {
@@ -172,7 +177,7 @@ class SeederService {
         const userData = doc.data();
         totalUsers++;
         
-        if (userData.email && userData.email.match(/user\d+@gmail\.com/)) {
+        if (userData.email && userData.email.match(/user\d{4}@gmail\.com/)) {
           seederUsers++;
         }
       });

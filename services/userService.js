@@ -177,21 +177,13 @@ export const deleteSantri = async (santriId) => {
       throw new Error('Santri sudah dihapus sebelumnya');
     }
 
-    await updateDoc(userRef, {
-      deleted: true,
-      deletedAt: new Date(),
-      deletedBy: 'admin',
-      updatedAt: new Date()
-    });
+    await deleteDoc(userRef);
 
     console.log('Data santri berhasil dihapus dari Firestore');
-    console.warn('Info: Akun Authentication tidak dapat dihapus dari client-side aplikasi');
-    console.warn('User masih bisa login tapi akan ditolak karena status deleted=true');
 
     return { 
       success: true, 
-      message: 'Data santri berhasil dihapus. Akun login akan otomatis dinonaktifkan.',
-      authWarning: 'Akun Authentication tidak dapat dihapus dari aplikasi mobile ini'
+      message: 'Data santri berhasil dihapus dari Firestore. Akun login tetap ada di sistem tapi tidak bisa digunakan.'
     };
   } catch (error) {
     console.error('Error menghapus santri:', error);

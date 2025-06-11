@@ -28,6 +28,7 @@ export default function DetailSantri() {
   const { santriId } = useLocalSearchParams();
   const [santri, setSantri] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
   const [pairingStatus, setPairingStatus] = useState(null);
   const [pairingLoading, setPairingLoading] = useState(false);
   const router = useRouter();
@@ -153,33 +154,48 @@ export default function DetailSantri() {
   const handleDeleteSantri = () => {
     Alert.alert(
       "Hapus Santri",
-      `Apakah Anda yakin ingin menghapus data ${santri?.namaSantri}?\n\nTindakan ini tidak dapat dibatalkan dan akan menghapus:\n• Data santri\n• Akun wali santri\n• Semua data terkait`,
+      `Apakah Anda yakin ingin menghapus data ${santri?.namaSantri}?\n\nTindakan ini akan:\n• Menghapus data santri dari sistem\n• Menonaktifkan akun wali (akun login tetap ada)\n• Email ${santri?.email} tidak dapat digunakan lagi\n• Tidak dapat dibatalkan\n\nLanjutkan?`,
       [
         { text: "Batal", style: "cancel" },
         {
           text: "Ya, Hapus",
           style: "destructive",
-          onPress: async () => {
-            const result = await deleteSantri(santriId);
-            if (result.success) {
-              Alert.alert("Berhasil", "Data santri berhasil dihapus", [
-                {
-                  text: "OK",
-                  onPress: () => {
-                    router.back();
-                    setTimeout(() => {
-                      router.push("/(admin)/daftar-santri");
-                    }, 100);
-                  },
-                },
-              ]);
-            } else {
-              Alert.alert("Error", result.error);
-            }
-          },
+          onPress: confirmDeleteSantri,
         },
       ]
     );
+  };
+
+  const confirmDeleteSantri = async () => {
+    setDeleting(true);
+
+    try {
+      const result = await deleteSantri(santriId);
+
+      if (result.success) {
+        Alert.alert(
+          "Berhasil Dihapus! ✅",
+          `Data santri ${santri?.namaSantri} berhasil dihapus dari sistem.\n\n⚠️ Catatan: Email ${santri?.email} tidak dapat digunakan untuk akun baru karena masih terdaftar di sistem autentikasi.`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                router.back();
+                setTimeout(() => {
+                  router.push("/(admin)/daftar-santri");
+                }, 100);
+              },
+            },
+          ]
+        );
+      } else {
+        Alert.alert("Error", `Gagal menghapus data santri: ${result.error}`);
+      }
+    } catch (error) {
+      Alert.alert("Error", `Terjadi kesalahan tidak terduga: ${error.message}`);
+    }
+
+    setDeleting(false);
   };
 
   if (loading) {
@@ -259,15 +275,26 @@ export default function DetailSantri() {
               onPress={handleEditSantri}
               variant="secondary"
               style={styles.editButton}
+              disabled={deleting}
             />
             <Button
-              title="🗑️ Hapus Santri"
+              title={deleting ? "Menghapus..." : "🗑️ Hapus Santri"}
               onPress={handleDeleteSantri}
               variant="outline"
               style={styles.deleteButton}
+              disabled={deleting}
             />
           </View>
         </View>
+
+        {deleting && (
+          <View style={styles.deletingInfo}>
+            <Text style={styles.deletingText}>
+              🔄 Menghapus data santri dari sistem...
+            </Text>
+            <Text style={styles.deletingSubtext}>Mohon tunggu sebentar</Text>
+          </View>
+        )}
 
         <View style={styles.infoSection}>
           <Text style={styles.sectionTitle}>Informasi Santri</Text>
@@ -337,7 +364,7 @@ export default function DetailSantri() {
                     pairingLoading ? "Memulai Pairing..." : "Mulai Pairing RFID"
                   }
                   onPress={handleStartPairing}
-                  disabled={pairingLoading}
+                  disabled={pairingLoading || deleting}
                   style={styles.pairingButton}
                 />
               )}
@@ -348,6 +375,7 @@ export default function DetailSantri() {
                   onPress={handleCancelPairing}
                   variant="outline"
                   style={styles.cancelButton}
+                  disabled={deleting}
                 />
               )}
 
@@ -460,6 +488,28 @@ const styles = StyleSheet.create({
   deleteButton: {
     flex: 1,
     borderColor: "#ef4444",
+  },
+  deletingInfo: {
+    backgroundColor: "#fef3c7",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#f59e0b",
+  },
+  deletingText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#92400e",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  deletingSubtext: {
+    fontSize: 14,
+    color: "#92400e",
+    textAlign: "center",
+    lineHeight: 20,
   },
   infoSection: {
     marginBottom: 32,
