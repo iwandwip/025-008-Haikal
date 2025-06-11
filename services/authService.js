@@ -5,7 +5,7 @@ import {
   deleteUser,
 } from 'firebase/auth';
 import { auth } from './firebase';
-import { createUserProfile } from './userService';
+import { createUserProfile, getUserProfile } from './userService';
 
 const handleAuthError = (error) => {
   const errorMessages = {
@@ -31,6 +31,16 @@ export const signInWithEmail = async (email, password) => {
     
     console.log('Mencoba masuk dengan email:', email);
     const result = await signInWithEmailAndPassword(auth, email, password);
+    
+    const profileResult = await getUserProfile(result.user.uid);
+    if (!profileResult.success) {
+      if (profileResult.error === 'User telah dihapus') {
+        await signOut(auth);
+        throw new Error('Akun Anda telah dinonaktifkan. Hubungi admin untuk informasi lebih lanjut.');
+      }
+      console.warn('Profile check failed:', profileResult.error);
+    }
+    
     console.log('Masuk berhasil');
     return { success: true, user: result.user };
   } catch (error) {

@@ -9,8 +9,7 @@ import {
   query, 
   where 
 } from 'firebase/firestore';
-import { deleteUser } from 'firebase/auth';
-import { db, auth } from './firebase';
+import { db } from './firebase';
 
 export const createUserProfile = async (uid, profileData) => {
   try {
@@ -31,6 +30,7 @@ export const createUserProfile = async (uid, profileData) => {
       id: uid,
       email: profileData.email,
       role: profileData.role,
+      deleted: false,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -69,6 +69,11 @@ export const getUserProfile = async (uid) => {
 
     if (docSnap.exists()) {
       const profile = docSnap.data();
+      
+      if (profile.deleted) {
+        return { success: false, error: 'User telah dihapus' };
+      }
+      
       return { success: true, profile };
     } else {
       return { success: false, error: 'Profil user tidak ditemukan' };
@@ -109,7 +114,11 @@ export const getAllSantri = async () => {
     }
 
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('role', '==', 'user'));
+    const q = query(
+      usersRef, 
+      where('role', '==', 'user'),
+      where('deleted', '==', false)
+    );
     const querySnapshot = await getDocs(q);
     
     const santriList = [];
@@ -163,26 +172,92 @@ export const deleteSantri = async (santriId) => {
     }
 
     const userData = userDoc.data();
-    const userEmail = userData.email;
-
-    await deleteDoc(userRef);
-    console.log('Data santri berhasil dihapus dari Firestore');
-
-    if (auth && userEmail) {
-      try {
-        const userRecord = await auth.getUserByEmail(userEmail);
-        if (userRecord) {
-          await deleteUser(userRecord);
-          console.log('User auth berhasil dihapus');
-        }
-      } catch (authError) {
-        console.warn('User auth tidak ditemukan atau sudah terhapus:', authError.message);
-      }
+    
+    if (userData.deleted) {
+      throw new Error('Santri sudah dihapus sebelumnya');
     }
 
-    return { success: true };
+    await updateDoc(userRef, {
+      deleted: true,
+      deletedAt: new Date(),
+      deletedBy: 'admin',
+      updatedAt: new Date()
+    });
+
+    console.log('Data santri berhasil dihapus dari Firestore');
+    console.warn('Info: Akun Authentication tidak dapat dihapus dari client-side aplikasi');
+    console.warn('User masih bisa login tapi akan ditolak karena status deleted=true');
+
+    return { 
+      success: true, 
+      message: 'Data santri berhasil dihapus. Akun login akan otomatis dinonaktifkan.',
+      authWarning: 'Akun Authentication tidak dapat dihapus dari aplikasi mobile ini'
+    };
   } catch (error) {
     console.error('Error menghapus santri:', error);
     return { success: false, error: error.message };
+  }
+};
+
+export const restoreSantri = async (santriId) => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const userRef = doc(db, 'users', santriId);
+    const userDoc = await getDoc(userRef);
+    
+    if (!userDoc.exists()) {
+      throw new Error('Data santri tidak ditemukan');
+    }
+
+    await updateDoc(userRef, {
+      deleted: false,
+      deletedAt: null,
+      deletedBy: null,
+      restoredAt: new Date(),
+      restoredBy: 'admin',
+      updatedAt: new Date()
+    });
+
+    console.log('Data santri berhasil dipulihkan');
+    return { success: true };
+  } catch (error) {
+    console.error('Error memulihkan santri:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getDeletedSantri = async () => {
+  try {
+    if (!db) {
+      return { success: true, data: [] };
+    }
+
+    const usersRef = collection(db, 'users');
+    const q = query(
+      usersRef, 
+      where('role', '==', 'user'),
+      where('deleted', '==', true)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const deletedSantriList = [];
+    querySnapshot.forEach((doc) => {
+      deletedSantriList.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+
+    deletedSantriList.sort((a, b) => 
+      new Date(b.deletedAt) - new Date(a.deletedAt)
+    );
+
+    return { success: true, data: deletedSantriList };
+  } catch (error) {
+    console.error('Error mengambil data santri terhapus:', error);
+    return { success: false, error: error.message, data: [] };
   }
 };
