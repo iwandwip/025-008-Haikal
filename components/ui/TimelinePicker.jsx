@@ -139,12 +139,12 @@ const TimelinePicker = ({
     );
   };
 
-  const isSameHour = (date1, date2) => {
-    return isSameDay(date1, date2) && date1.getHours() === date2.getHours();
+  const isSimulationMode = () => {
+    return minDate && maxDate;
   };
 
   const getAllValidDateTime = () => {
-    if (!minDate || !maxDate) return null;
+    if (!isSimulationMode()) return null;
 
     const min = new Date(minDate);
     const max = new Date(maxDate);
@@ -170,49 +170,148 @@ const TimelinePicker = ({
     return validTimes;
   };
 
+  const getValidDatesInRange = () => {
+    if (!isSimulationMode()) return null;
+
+    const validTimes = getAllValidDateTime();
+    if (!validTimes) return null;
+
+    const uniqueDates = new Set();
+    validTimes.forEach((time) => {
+      const dateKey = `${time.getFullYear()}-${time.getMonth()}-${time.getDate()}`;
+      uniqueDates.add(dateKey);
+    });
+
+    return Array.from(uniqueDates).map((dateKey) => {
+      const [year, month, date] = dateKey.split("-").map(Number);
+      return new Date(year, month, date);
+    });
+  };
+
+  const getValidHoursForDate = (targetDate) => {
+    if (!isSimulationMode()) return null;
+
+    const validTimes = getAllValidDateTime();
+    if (!validTimes) return null;
+
+    const hoursForDate = validTimes
+      .filter((time) => isSameDay(time, targetDate))
+      .map((time) => time.getHours());
+
+    return [...new Set(hoursForDate)].sort((a, b) => a - b);
+  };
+
+  const getValidMinutesForDateHour = (targetDate, targetHour) => {
+    if (!isSimulationMode()) return null;
+
+    const validTimes = getAllValidDateTime();
+    if (!validTimes) return null;
+
+    const minutesForDateHour = validTimes
+      .filter(
+        (time) => isSameDay(time, targetDate) && time.getHours() === targetHour
+      )
+      .map((time) => time.getMinutes());
+
+    return [...new Set(minutesForDateHour)].sort((a, b) => a - b);
+  };
+
   const getValidRange = (level) => {
-    const min = minDate ? new Date(minDate) : null;
-    const max = maxDate ? new Date(maxDate) : null;
     const current = new Date(selectedDate);
 
-    if ((level === "hour" || level === "minute") && min && max) {
-      const validTimes = getAllValidDateTime();
-      if (!validTimes) return { min: 0, max: 0 };
+    if (isSimulationMode()) {
+      switch (level) {
+        case "year":
+          const min = new Date(minDate);
+          const max = new Date(maxDate);
+          return {
+            min: min.getFullYear(),
+            max: max.getFullYear(),
+          };
 
-      const currentDateValidTimes = validTimes.filter((time) =>
-        isSameDay(time, current)
-      );
+        case "month":
+          const minMonth = new Date(minDate).getMonth();
+          const maxMonth = new Date(maxDate).getMonth();
+          const minYear = new Date(minDate).getFullYear();
+          const maxYear = new Date(maxDate).getFullYear();
 
-      if (level === "hour") {
-        const validHours = [
-          ...new Set(currentDateValidTimes.map((time) => time.getHours())),
-        ];
-        return {
-          min: Math.min(...validHours),
-          max: Math.max(...validHours),
-          validValues: validHours.sort((a, b) => a - b),
-        };
-      }
+          if (
+            current.getFullYear() === minYear &&
+            current.getFullYear() === maxYear
+          ) {
+            return { min: minMonth, max: maxMonth };
+          } else if (current.getFullYear() === minYear) {
+            return { min: minMonth, max: 11 };
+          } else if (current.getFullYear() === maxYear) {
+            return { min: 0, max: maxMonth };
+          } else {
+            return { min: 0, max: 11 };
+          }
 
-      if (level === "minute") {
-        const currentHourValidTimes = currentDateValidTimes.filter(
-          (time) => time.getHours() === current.getHours()
-        );
-        const validMinutes = [
-          ...new Set(currentHourValidTimes.map((time) => time.getMinutes())),
-        ];
+        case "day":
+          const validDates = getValidDatesInRange();
+          if (!validDates) return { min: 1, max: 31 };
 
-        if (validMinutes.length === 0) {
-          return { min: 0, max: 59, validValues: [] };
-        }
+          const currentMonthDates = validDates
+            .filter(
+              (date) =>
+                date.getFullYear() === current.getFullYear() &&
+                date.getMonth() === current.getMonth()
+            )
+            .map((date) => date.getDate());
 
-        return {
-          min: Math.min(...validMinutes),
-          max: Math.max(...validMinutes),
-          validValues: validMinutes.sort((a, b) => a - b),
-        };
+          if (currentMonthDates.length === 0) {
+            return { min: 1, max: 1, validValues: [] };
+          }
+
+          return {
+            min: Math.min(...currentMonthDates),
+            max: Math.max(...currentMonthDates),
+            validValues: currentMonthDates.sort((a, b) => a - b),
+          };
+
+        case "hour":
+          const validHours = getValidHoursForDate(current);
+          if (!validHours || validHours.length === 0) {
+            return { min: 0, max: 23, validValues: [] };
+          }
+
+          return {
+            min: Math.min(...validHours),
+            max: Math.max(...validHours),
+            validValues: validHours,
+          };
+
+        case "minute":
+          const validMinutes = getValidMinutesForDateHour(
+            current,
+            current.getHours()
+          );
+          if (!validMinutes || validMinutes.length === 0) {
+            return { min: 0, max: 59, validValues: [] };
+          }
+
+          return {
+            min: Math.min(...validMinutes),
+            max: Math.max(...validMinutes),
+            validValues: validMinutes,
+          };
+
+        case "week":
+          const weeksInMonth = getWeeksInMonth(
+            current.getFullYear(),
+            current.getMonth()
+          );
+          return { min: 1, max: weeksInMonth };
       }
     }
+
+    return getDefaultRange(level, current);
+  };
+
+  const getDefaultRange = (level, current) => {
+    const min = minDate ? new Date(minDate) : null;
+    const max = maxDate ? new Date(maxDate) : null;
 
     switch (level) {
       case "year":
@@ -262,6 +361,12 @@ const TimelinePicker = ({
 
         return { min: minDay, max: maxDay };
 
+      case "hour":
+        return { min: 0, max: 23 };
+
+      case "minute":
+        return { min: 0, max: 59 };
+
       case "week":
         const weeksInMonth = getWeeksInMonth(
           current.getFullYear(),
@@ -270,7 +375,7 @@ const TimelinePicker = ({
         return { min: 1, max: weeksInMonth };
 
       default:
-        return { min: 0, max: 100 };
+        return { min: 0, max: 0 };
     }
   };
 
@@ -278,7 +383,7 @@ const TimelinePicker = ({
     const range = getValidRange(level);
     const options = [];
 
-    if (range.validValues) {
+    if (range.validValues && range.validValues.length > 0) {
       range.validValues.forEach((value) => {
         let label = value.toString();
 
@@ -345,7 +450,7 @@ const TimelinePicker = ({
   };
 
   const isValidDateTime = (testDate) => {
-    if (!minDate || !maxDate) return true;
+    if (!isSimulationMode()) return true;
 
     const min = new Date(minDate);
     const max = new Date(maxDate);
@@ -397,8 +502,14 @@ const TimelinePicker = ({
         break;
     }
 
-    if (updated && isValidDateTime(newDate)) {
-      setSelectedDate(newDate);
+    if (updated) {
+      if (isSimulationMode()) {
+        if (isValidDateTime(newDate)) {
+          setSelectedDate(newDate);
+        }
+      } else {
+        setSelectedDate(newDate);
+      }
     }
   };
 

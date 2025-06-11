@@ -85,25 +85,40 @@ export default function CreateTimeline() {
 
     switch (type) {
       case "yearly":
-        end.setFullYear(start.getFullYear() + duration);
+        end.setFullYear(start.getFullYear() + duration - 1);
+        end.setMonth(11);
+        end.setDate(31);
+        end.setHours(23, 59, 59, 999);
         break;
       case "monthly":
-        end.setMonth(start.getMonth() + duration);
+        end.setMonth(start.getMonth() + duration - 1);
+        const lastDayOfMonth = new Date(
+          end.getFullYear(),
+          end.getMonth() + 1,
+          0
+        ).getDate();
+        end.setDate(lastDayOfMonth);
+        end.setHours(23, 59, 59, 999);
         break;
       case "weekly":
-        end.setDate(start.getDate() + duration * 7);
+        end.setDate(start.getDate() + (duration - 1) * 7);
+        end.setHours(23, 59, 59, 999);
         break;
       case "daily":
-        end.setDate(start.getDate() + duration);
+        end.setDate(start.getDate() + duration - 1);
+        end.setHours(23, 59, 59, 999);
         break;
       case "hourly":
-        end.setHours(start.getHours() + duration);
+        end.setHours(start.getHours() + duration - 1);
+        end.setMinutes(59, 59, 999);
         break;
       case "minute":
-        end.setMinutes(start.getMinutes() + duration);
+        end.setMinutes(start.getMinutes() + duration - 1);
+        end.setSeconds(59, 999);
         break;
       default:
-        end.setDate(start.getDate() + duration);
+        end.setDate(start.getDate() + duration - 1);
+        end.setHours(23, 59, 59, 999);
     }
 
     return end.toISOString();
