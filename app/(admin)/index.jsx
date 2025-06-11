@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import Button from "../../components/ui/Button";
 import { signOutUser } from "../../services/authService";
@@ -15,6 +16,7 @@ import { signOutUser } from "../../services/authService";
 function AdminHome() {
   const { currentUser, userProfile } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -54,8 +56,8 @@ function AdminHome() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.content, { paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.headerSection}>
           <Text style={styles.title}>Dashboard Admin</Text>
           <Text style={styles.subtitle}>TPQ Ibadurrohman</Text>
@@ -167,7 +169,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 40,
-    paddingBottom: 24,
   },
   headerSection: {
     alignItems: "center",

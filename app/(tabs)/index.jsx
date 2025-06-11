@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
@@ -24,6 +25,7 @@ function StatusPembayaran() {
   const { userProfile } = useAuth();
   const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
+  const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState(null);
   const [payments, setPayments] = useState([]);
@@ -431,7 +433,10 @@ function StatusPembayaran() {
   if (settingsLoading || loading) {
     return (
       <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[
+          styles.container,
+          { backgroundColor: colors.background, paddingTop: insets.top },
+        ]}
       >
         <View
           style={[
@@ -464,7 +469,10 @@ function StatusPembayaran() {
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: insets.top },
+      ]}
     >
       <View
         style={[
@@ -492,7 +500,10 @@ function StatusPembayaran() {
           data={listData}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

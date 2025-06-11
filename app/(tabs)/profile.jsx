@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import Button from "../../components/ui/Button";
@@ -19,6 +20,7 @@ function Profile() {
   const { currentUser, userProfile } = useAuth();
   const { theme, loading: settingsLoading } = useSettings();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [loggingOut, setLoggingOut] = useState(false);
   const colors = getColors(theme);
 
@@ -49,7 +51,10 @@ function Profile() {
   if (settingsLoading) {
     return (
       <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[
+          styles.container,
+          { backgroundColor: colors.background, paddingTop: insets.top },
+        ]}
       >
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -63,11 +68,18 @@ function Profile() {
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: insets.top },
+      ]}
     >
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
       >
         <View style={styles.content}>
           <View style={styles.profileSection}>
@@ -309,9 +321,12 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  content: {
+  scrollContent: {
     padding: 24,
     paddingTop: 40,
+  },
+  content: {
+    flex: 1,
   },
   profileSection: {
     alignItems: "center",

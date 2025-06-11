@@ -157,6 +157,10 @@ export default function EditSantri() {
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
         >
           <View style={styles.content}>
             <View style={styles.warningBox}>
@@ -274,9 +278,12 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  content: {
+  scrollContent: {
     paddingHorizontal: 24,
     paddingVertical: 24,
+  },
+  content: {
+    flex: 1,
   },
   warningBox: {
     backgroundColor: "#fef3c7",

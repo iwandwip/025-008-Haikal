@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "haikal-app",
+    "name": "Haikal App",
     "slug": "haikal-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon-money.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -19,12 +19,12 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon-money.png",
         "backgroundColor": "#F50057"
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png",
+      "favicon": "./assets/icon-money.png",
       "bundler": "metro"
     },
     "plugins": [

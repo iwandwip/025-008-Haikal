@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  SafeAreaView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -92,7 +93,7 @@ export default function EditProfile() {
 
   if (settingsLoading) {
     return (
-      <View
+      <SafeAreaView
         style={[
           styles.container,
           { paddingTop: insets.top, backgroundColor: colors.background },
@@ -125,12 +126,12 @@ export default function EditProfile() {
             Memuat profil...
           </Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View
+    <SafeAreaView
       style={[
         styles.container,
         { paddingTop: insets.top, backgroundColor: colors.background },
@@ -165,6 +166,10 @@ export default function EditProfile() {
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
         >
           <View style={styles.content}>
             <View style={styles.section}>
@@ -246,7 +251,7 @@ export default function EditProfile() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -289,9 +294,12 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  content: {
+  scrollContent: {
     paddingHorizontal: 24,
     paddingVertical: 24,
+  },
+  content: {
+    flex: 1,
   },
   section: {
     marginBottom: 32,

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
 import { getAllUsersPaymentStatus } from "../../services/adminPaymentService";
@@ -19,6 +20,7 @@ function PaymentStatus() {
   const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [users, setUsers] = useState([]);
   const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -298,7 +300,10 @@ function PaymentStatus() {
   if (settingsLoading || loading) {
     return (
       <SafeAreaView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        style={[
+          styles.container,
+          { backgroundColor: colors.background, paddingTop: insets.top },
+        ]}
       >
         <View
           style={[
@@ -328,7 +333,10 @@ function PaymentStatus() {
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: colors.background }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.background, paddingTop: insets.top },
+      ]}
     >
       <View
         style={[
@@ -386,7 +394,10 @@ function PaymentStatus() {
           data={filteredUsers}
           renderItem={renderUserItem}
           keyExtractor={keyExtractor}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 24 },
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl

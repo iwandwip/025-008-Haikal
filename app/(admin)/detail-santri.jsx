@@ -236,7 +236,14 @@ export default function DetailSantri() {
         <Text style={styles.headerTitle}>Detail Santri</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+      >
         <View style={styles.profileSection}>
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarText}>👤</Text>
@@ -406,6 +413,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     paddingTop: 16,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   profileSection: {
     alignItems: "center",

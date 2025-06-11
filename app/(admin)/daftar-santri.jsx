@@ -140,6 +140,10 @@ export default function DaftarSantri() {
             renderItem={renderSantriItem}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: insets.bottom + 24 },
+            ]}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -209,6 +213,9 @@ const styles = StyleSheet.create({
   statsSubtext: {
     fontSize: 14,
     color: "#64748b",
+  },
+  listContent: {
+    paddingBottom: 24,
   },
   santriCard: {
     backgroundColor: "#fff",

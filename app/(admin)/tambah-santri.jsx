@@ -123,6 +123,10 @@ export default function TambahSantri() {
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
         >
           <View style={styles.content}>
             <View style={styles.section}>
@@ -227,9 +231,12 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  content: {
+  scrollContent: {
     paddingHorizontal: 24,
     paddingVertical: 24,
+  },
+  content: {
+    flex: 1,
   },
   section: {
     marginBottom: 32,
