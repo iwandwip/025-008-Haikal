@@ -102,26 +102,26 @@ export default function ToastNotification() {
         return {
           ...baseStyle,
           borderLeftColor: colors.success,
-          backgroundColor: colors.success + "10",
+          backgroundColor: colors.white,
         };
       case "error":
         return {
           ...baseStyle,
           borderLeftColor: colors.error,
-          backgroundColor: colors.error + "10",
+          backgroundColor: colors.white,
         };
       case "warning":
         return {
           ...baseStyle,
           borderLeftColor: colors.warning,
-          backgroundColor: colors.warning + "10",
+          backgroundColor: colors.white,
         };
       case "info":
       default:
         return {
           ...baseStyle,
           borderLeftColor: colors.primary,
-          backgroundColor: colors.primary + "10",
+          backgroundColor: colors.white,
         };
     }
   };
@@ -145,133 +145,166 @@ export default function ToastNotification() {
   }
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          transform: [{ translateY }, { translateX }, { scale }],
-          opacity,
-          zIndex: 9999,
-        },
-      ]}
-    >
-      <TouchableOpacity
+    <View style={styles.overlay}>
+      <Animated.View
         style={[
-          styles.notification,
-          getNotificationStyle(currentNotification.type),
+          styles.container,
           {
-            shadowColor: colors.shadow.color,
+            transform: [{ translateY }, { translateX }, { scale }],
+            opacity,
+            zIndex: 9999,
           },
         ]}
-        onPress={dismissNotification}
-        onLongPress={handleSwipeUp}
-        activeOpacity={0.9}
       >
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <View style={styles.titleRow}>
-              {currentNotification.icon && (
-                <Text
-                  style={[styles.icon, getIconStyle(currentNotification.type)]}
-                >
-                  {currentNotification.icon}
-                </Text>
-              )}
-              <Text style={[styles.title, { color: colors.gray900 }]}>
-                {currentNotification.title}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.closeButton, { backgroundColor: colors.gray100 }]}
-              onPress={dismissNotification}
-            >
-              <Text style={[styles.closeText, { color: colors.gray600 }]}>
-                ✕
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <Text style={[styles.message, { color: colors.gray700 }]}>
-            {currentNotification.message}
-          </Text>
-
-          {currentNotification.actions &&
-            currentNotification.actions.length > 0 && (
-              <View style={styles.actions}>
-                {currentNotification.actions.map((action, index) => (
-                  <TouchableOpacity
-                    key={index}
+        <TouchableOpacity
+          style={[
+            styles.notification,
+            getNotificationStyle(currentNotification.type),
+            {
+              shadowColor: colors.shadow.color,
+            },
+          ]}
+          onPress={dismissNotification}
+          onLongPress={handleSwipeUp}
+          activeOpacity={0.9}
+        >
+          <View style={styles.content}>
+            <View style={styles.header}>
+              <View style={styles.titleRow}>
+                {currentNotification.icon && (
+                  <View
                     style={[
-                      styles.actionButton,
-                      action.primary && { backgroundColor: colors.primary },
-                      !action.primary && { backgroundColor: colors.gray100 },
+                      styles.iconContainer,
+                      {
+                        backgroundColor:
+                          getIconStyle(currentNotification.type).color + "15",
+                      },
                     ]}
-                    onPress={() => {
-                      action.onPress?.(currentNotification);
-                      dismissNotification();
-                    }}
                   >
                     <Text
                       style={[
-                        styles.actionText,
-                        action.primary && { color: colors.white },
-                        !action.primary && { color: colors.gray700 },
+                        styles.icon,
+                        getIconStyle(currentNotification.type),
                       ]}
                     >
-                      {action.label}
+                      {currentNotification.icon}
                     </Text>
-                  </TouchableOpacity>
-                ))}
+                  </View>
+                )}
+                <Text style={[styles.title, { color: colors.gray900 }]}>
+                  {currentNotification.title}
+                </Text>
               </View>
-            )}
-        </View>
 
-        {currentNotification.autoHide && (
-          <View style={styles.progressContainer}>
-            <Animated.View
-              style={[
-                styles.progressBar,
-                {
-                  backgroundColor: getIconStyle(currentNotification.type).color,
-                  width: `${Math.max(
-                    0,
-                    Math.min(
-                      100,
-                      100 -
-                        ((Date.now() - currentNotification.timestamp) /
-                          currentNotification.duration) *
-                          100
-                    )
-                  )}%`,
-                },
-              ]}
-            />
+              <TouchableOpacity
+                style={[
+                  styles.closeButton,
+                  {
+                    backgroundColor: colors.gray100,
+                    borderWidth: 1,
+                    borderColor: colors.gray200,
+                  },
+                ]}
+                onPress={dismissNotification}
+              >
+                <Text style={[styles.closeText, { color: colors.gray600 }]}>
+                  ✕
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.message, { color: colors.gray700 }]}>
+              {currentNotification.message}
+            </Text>
+
+            {currentNotification.actions &&
+              currentNotification.actions.length > 0 && (
+                <View style={styles.actions}>
+                  {currentNotification.actions.map((action, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[
+                        styles.actionButton,
+                        action.primary && { backgroundColor: colors.primary },
+                        !action.primary && { backgroundColor: colors.gray100 },
+                      ]}
+                      onPress={() => {
+                        action.onPress?.(currentNotification);
+                        dismissNotification();
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.actionText,
+                          action.primary && { color: colors.white },
+                          !action.primary && { color: colors.gray700 },
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
           </View>
-        )}
-      </TouchableOpacity>
-    </Animated.View>
+
+          {currentNotification.autoHide && (
+            <View style={styles.progressContainer}>
+              <Animated.View
+                style={[
+                  styles.progressBar,
+                  {
+                    backgroundColor: getIconStyle(currentNotification.type)
+                      .color,
+                    width: `${Math.max(
+                      0,
+                      Math.min(
+                        100,
+                        100 -
+                          ((Date.now() - currentNotification.timestamp) /
+                            currentNotification.duration) *
+                            100
+                      )
+                    )}%`,
+                  },
+                ]}
+              />
+            </View>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9998,
+    pointerEvents: "box-none",
+  },
   container: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 16,
+    zIndex: 9999,
   },
   notification: {
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 16,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.05)",
+    borderColor: "rgba(0,0,0,0.08)",
   },
   content: {
     flex: 1,
@@ -287,9 +320,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
   },
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
   icon: {
-    fontSize: 20,
-    marginRight: 8,
+    fontSize: 16,
   },
   title: {
     fontSize: 16,
@@ -297,12 +337,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   closeButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   closeText: {
     fontSize: 14,

@@ -22,7 +22,12 @@ function AdminHome() {
   const insets = useSafeAreaInsets();
   const [loggingOut, setLoggingOut] = useState(false);
   const [seederLoading, setSeederLoading] = useState(false);
-  const [seederStats, setSeederStats] = useState({ total: 0, seederUsers: 0 });
+  const [seederStats, setSeederStats] = useState({
+    total: 0,
+    seederUsers: 0,
+    highestUserNumber: 0,
+    nextUserNumber: 1,
+  });
 
   useEffect(() => {
     loadSeederStats();
@@ -58,9 +63,14 @@ function AdminHome() {
   };
 
   const handleSeeder = async () => {
+    const nextUser = seederStats.nextUserNumber;
+    const nextThreeUsers = `user${nextUser}@gmail.com, user${
+      nextUser + 1
+    }@gmail.com, user${nextUser + 2}@gmail.com`;
+
     Alert.alert(
       "Generate Data Santri",
-      "Akan membuat 3 akun wali santri baru dengan data random. Lanjutkan?",
+      `Akan membuat 3 akun wali santri baru:\n${nextThreeUsers}\n\nLanjutkan?`,
       [
         { text: "Batal", style: "cancel" },
         {
@@ -243,13 +253,16 @@ function AdminHome() {
               </Text>
               <Text style={styles.menuDesc}>
                 {seederLoading
-                  ? "Sedang membuat 3 akun santri dengan data random..."
-                  : "Buat 3 akun santri dengan data random untuk testing"}
+                  ? "Sedang membuat 3 akun santri dengan data sequential..."
+                  : "Buat 3 akun santri dengan email sequential untuk testing"}
               </Text>
               <View style={styles.seederStats}>
                 <Text style={styles.seederStatsText}>
                   Total Santri: {seederStats.total} | Generated:{" "}
                   {seederStats.seederUsers}
+                </Text>
+                <Text style={styles.seederNextText}>
+                  Next: user{seederStats.nextUserNumber}@gmail.com
                 </Text>
               </View>
             </View>
@@ -280,9 +293,11 @@ function AdminHome() {
             <ActivityIndicator size="large" color="#ef4444" />
             <Text style={styles.loadingTitle}>Generating Data Santri</Text>
             <Text style={styles.loadingSubtitle}>
-              Membuat 3 akun dengan data random...
+              Membuat 3 akun dengan email sequential...
             </Text>
-            <Text style={styles.loadingNote}>Mohon tunggu sebentar</Text>
+            <Text style={styles.loadingNote}>
+              Next: user{seederStats.nextUserNumber}@gmail.com
+            </Text>
           </View>
         </View>
       )}
@@ -395,6 +410,12 @@ const styles = StyleSheet.create({
     color: "#ef4444",
     fontWeight: "500",
   },
+  seederNextText: {
+    fontSize: 11,
+    color: "#059669",
+    fontWeight: "600",
+    marginTop: 2,
+  },
   menuArrow: {
     marginLeft: 12,
   },
@@ -449,9 +470,9 @@ const styles = StyleSheet.create({
   },
   loadingNote: {
     fontSize: 12,
-    color: "#ef4444",
+    color: "#059669",
     textAlign: "center",
-    fontWeight: "500",
+    fontWeight: "600",
   },
 });
 

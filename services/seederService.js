@@ -49,37 +49,74 @@ class SeederService {
     return nameList[Math.floor(Math.random() * nameList.length)];
   }
 
-  generateRandomUserNumber() {
-    return Math.floor(Math.random() * 9000) + 1000;
+  async getHighestUserNumber() {
+    try {
+      if (!db) {
+        return 0;
+      }
+
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('role', '==', 'user'));
+      const querySnapshot = await getDocs(q);
+      
+      let highestNumber = 0;
+      
+      querySnapshot.forEach((doc) => {
+        const userData = doc.data();
+        if (userData.email) {
+          const match = userData.email.match(/^user(\d+)@gmail\.com$/);
+          if (match) {
+            const number = parseInt(match[1]);
+            if (number > highestNumber) {
+              highestNumber = number;
+            }
+          }
+        }
+      });
+      
+      return highestNumber;
+    } catch (error) {
+      console.error('Error getting highest user number:', error);
+      return 0;
+    }
   }
 
   async generateUniqueEmail() {
-    const maxRetries = 100;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const userNumber = this.generateRandomUserNumber();
-      const email = `user${userNumber}@gmail.com`;
+    try {
+      const startNumber = (await this.getHighestUserNumber()) + 1;
+      const maxRetries = 1000;
       
-      try {
-        const emailCheck = await checkEmailExists(email);
+      for (let i = 0; i < maxRetries; i++) {
+        const userNumber = startNumber + i;
+        const email = `user${userNumber}@gmail.com`;
         
-        if (emailCheck.success && !emailCheck.exists) {
-          return { success: true, email: email, userNumber: userNumber };
+        try {
+          const emailCheck = await checkEmailExists(email);
+          
+          if (emailCheck.success && !emailCheck.exists) {
+            return { success: true, email: email, userNumber: userNumber };
+          }
+          
+          if (!emailCheck.success) {
+            console.warn(`Error checking email ${email}:`, emailCheck.error);
+          }
+          
+        } catch (error) {
+          console.warn(`Error checking email ${email}:`, error);
         }
-        
-        if (!emailCheck.success) {
-          console.warn(`Error checking email ${email}:`, emailCheck.error);
-        }
-        
-      } catch (error) {
-        console.warn(`Error on attempt ${attempt + 1} for email ${email}:`, error);
       }
+      
+      return { 
+        success: false, 
+        error: `Tidak dapat menemukan email unik setelah ${maxRetries} percobaan dari user${startNumber}@gmail.com`
+      };
+    } catch (error) {
+      console.error('Error in generateUniqueEmail:', error);
+      return { 
+        success: false, 
+        error: `Error generating unique email: ${error.message}`
+      };
     }
-    
-    return { 
-      success: false, 
-      error: `Tidak dapat menemukan email unik setelah ${maxRetries} percobaan`
-    };
   }
 
   async createSeederUsers(count = 3) {
@@ -162,7 +199,7 @@ class SeederService {
   async getSeederStats() {
     try {
       if (!db) {
-        return { total: 0, seederUsers: 0 };
+        return { total: 0, seederUsers: 0, highestUserNumber: 0, nextUserNumber: 1 };
       }
 
       const usersRef = collection(db, 'users');
@@ -172,23 +209,39 @@ class SeederService {
       
       let totalUsers = 0;
       let seederUsers = 0;
+      let highestUserNumber = 0;
 
       querySnapshot.forEach((doc) => {
         const userData = doc.data();
         totalUsers++;
         
-        if (userData.email && userData.email.match(/user\d{4}@gmail\.com/)) {
+        if (userData.email && userData.email.match(/^user\d+@gmail\.com$/)) {
           seederUsers++;
+          
+          const match = userData.email.match(/^user(\d+)@gmail\.com$/);
+          if (match) {
+            const number = parseInt(match[1]);
+            if (number > highestUserNumber) {
+              highestUserNumber = number;
+            }
+          }
         }
       });
 
       return {
         total: totalUsers,
-        seederUsers: seederUsers
+        seederUsers: seederUsers,
+        highestUserNumber: highestUserNumber,
+        nextUserNumber: highestUserNumber + 1
       };
     } catch (error) {
       console.error('Error getting seeder stats:', error);
-      return { total: 0, seederUsers: 0 };
+      return { 
+        total: 0, 
+        seederUsers: 0, 
+        highestUserNumber: 0, 
+        nextUserNumber: 1 
+      };
     }
   }
 }
