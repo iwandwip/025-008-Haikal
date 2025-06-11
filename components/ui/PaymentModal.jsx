@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,18 +8,81 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  TextInput,
+  Switch,
 } from "react-native";
+import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
+import {
+  getUserCreditBalance,
+  calculatePaymentAllocation,
+} from "../../services/creditService";
 import Button from "./Button";
 
-const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
+const PaymentModal = ({
+  visible,
+  payment,
+  allPayments = [],
+  onClose,
+  onPaymentSuccess,
+}) => {
+  const { userProfile } = useAuth();
   const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [isCustomPayment, setIsCustomPayment] = useState(false);
+  const [customAmount, setCustomAmount] = useState("");
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [paymentAllocation, setPaymentAllocation] = useState(null);
+  const [loadingCredit, setLoadingCredit] = useState(false);
 
   if (!payment) return null;
+
+  useEffect(() => {
+    if (visible && userProfile?.id) {
+      loadCreditBalance();
+    }
+  }, [visible, userProfile?.id]);
+
+  useEffect(() => {
+    if (isCustomPayment && customAmount && allPayments.length > 0) {
+      calculateAllocation();
+    } else {
+      setPaymentAllocation(null);
+    }
+  }, [customAmount, isCustomPayment, creditBalance, allPayments]);
+
+  const loadCreditBalance = async () => {
+    setLoadingCredit(true);
+    try {
+      const result = await getUserCreditBalance(userProfile.id);
+      if (result.success) {
+        setCreditBalance(result.balance);
+      }
+    } catch (error) {
+      console.error("Error loading credit balance:", error);
+    }
+    setLoadingCredit(false);
+  };
+
+  const calculateAllocation = () => {
+    const amount = parseInt(customAmount.replace(/[^0-9]/g, "")) || 0;
+    if (amount <= 0) {
+      setPaymentAllocation(null);
+      return;
+    }
+
+    const result = calculatePaymentAllocation(
+      amount,
+      allPayments,
+      creditBalance
+    );
+    if (result.success) {
+      setPaymentAllocation(result);
+    }
+  };
 
   const paymentMethods = [
     {
@@ -74,8 +137,25 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
     }).format(amount);
   };
 
+  const formatInputCurrency = (value) => {
+    const number = value.replace(/[^0-9]/g, "");
+    return number.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+
   const handleMethodSelect = (method) => {
     setSelectedMethod(method);
+  };
+
+  const handleCustomAmountChange = (text) => {
+    const formatted = formatInputCurrency(text);
+    setCustomAmount(formatted);
+  };
+
+  const getEffectiveAmount = () => {
+    if (isCustomPayment) {
+      return parseInt(customAmount.replace(/[^0-9]/g, "")) || 0;
+    }
+    return Math.max(0, payment.amount - (payment.creditApplied || 0));
   };
 
   const handlePayNow = async () => {
@@ -87,32 +167,90 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
       return;
     }
 
+    const paymentAmount = getEffectiveAmount();
+    if (paymentAmount <= 0 && !isCustomPayment) {
+      Alert.alert("Error", "Nominal pembayaran tidak valid");
+      return;
+    }
+
     setProcessing(true);
 
     setTimeout(() => {
-      Alert.alert(
-        "Pembayaran Berhasil! 🎉",
-        `Pembayaran ${payment.periodData?.label} sebesar ${formatCurrency(
-          payment.amount
-        )} berhasil diproses melalui ${selectedMethod.name}.`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              setProcessing(false);
-              setSelectedMethod(null);
-              onPaymentSuccess(payment, selectedMethod.id);
-              onClose();
-            },
+      let successMessage = "";
+
+      if (isCustomPayment && paymentAllocation) {
+        const { allocations, summary } = paymentAllocation;
+        successMessage = `Pembayaran ${formatCurrency(
+          paymentAmount
+        )} berhasil!\n\n`;
+
+        if (allocations.length > 0) {
+          successMessage += `Periode yang lunas:\n`;
+          allocations.forEach((alloc, index) => {
+            successMessage += `${index + 1}. ${alloc.periodLabel}\n`;
+          });
+        }
+
+        if (summary.creditUsed > 0) {
+          successMessage += `\nCredit digunakan: ${formatCurrency(
+            summary.creditUsed
+          )}`;
+        }
+
+        if (summary.newCreditGenerated > 0) {
+          successMessage += `\nCredit baru: ${formatCurrency(
+            summary.newCreditGenerated
+          )}`;
+        }
+
+        successMessage += `\nSaldo credit: ${formatCurrency(
+          summary.finalCreditBalance
+        )}`;
+      } else {
+        successMessage = `Pembayaran ${
+          payment.periodData?.label
+        } sebesar ${formatCurrency(paymentAmount)} berhasil diproses melalui ${
+          selectedMethod.name
+        }.`;
+
+        if (creditBalance > 0) {
+          const creditUsed = Math.min(creditBalance, payment.amount);
+          if (creditUsed > 0) {
+            successMessage += `\n\nCredit digunakan: ${formatCurrency(
+              creditUsed
+            )}`;
+          }
+        }
+      }
+
+      Alert.alert("Pembayaran Berhasil! 🎉", successMessage, [
+        {
+          text: "OK",
+          onPress: () => {
+            setProcessing(false);
+            setSelectedMethod(null);
+            setIsCustomPayment(false);
+            setCustomAmount("");
+            setPaymentAllocation(null);
+            onPaymentSuccess(
+              payment,
+              selectedMethod.id,
+              isCustomPayment ? paymentAmount : null,
+              paymentAllocation
+            );
+            onClose();
           },
-        ]
-      );
+        },
+      ]);
     }, 2000);
   };
 
   const handleClose = () => {
     if (!processing) {
       setSelectedMethod(null);
+      setIsCustomPayment(false);
+      setCustomAmount("");
+      setPaymentAllocation(null);
       onClose();
     }
   };
@@ -120,6 +258,9 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
   if (settingsLoading) {
     return null;
   }
+
+  const effectiveAmount = getEffectiveAmount();
+  const creditApplied = Math.min(creditBalance, payment.amount);
 
   return (
     <Modal
@@ -159,19 +300,168 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
             style={styles.modalContent}
             showsVerticalScrollIndicator={false}
           >
+            {creditBalance > 0 && (
+              <View
+                style={[
+                  styles.creditInfo,
+                  { backgroundColor: colors.primary + "10" },
+                ]}
+              >
+                <Text style={[styles.creditLabel, { color: colors.primary }]}>
+                  💰 Saldo Credit Anda
+                </Text>
+                <Text style={[styles.creditAmount, { color: colors.primary }]}>
+                  {formatCurrency(creditBalance)}
+                </Text>
+              </View>
+            )}
+
+            <View
+              style={[
+                styles.paymentTypeSelector,
+                { backgroundColor: colors.gray50 },
+              ]}
+            >
+              <View style={styles.switchContainer}>
+                <Text style={[styles.switchLabel, { color: colors.gray900 }]}>
+                  {isCustomPayment ? "Bayar Custom" : "Bayar Tagihan"}
+                </Text>
+                <Switch
+                  value={isCustomPayment}
+                  onValueChange={setIsCustomPayment}
+                  trackColor={{ false: colors.gray300, true: colors.primary }}
+                  thumbColor={colors.white}
+                />
+              </View>
+            </View>
+
             <View
               style={[
                 styles.paymentInfo,
                 { backgroundColor: colors.primary + "10" },
               ]}
             >
-              <Text style={[styles.periodTitle, { color: colors.gray900 }]}>
-                {payment.periodData?.label ||
-                  `Periode ${payment.periodData?.number}`}
-              </Text>
-              <Text style={[styles.amountText, { color: colors.primary }]}>
-                {formatCurrency(payment.amount)}
-              </Text>
+              {!isCustomPayment ? (
+                <>
+                  <Text style={[styles.periodTitle, { color: colors.gray900 }]}>
+                    {payment.periodData?.label ||
+                      `Periode ${payment.periodData?.number}`}
+                  </Text>
+                  <Text
+                    style={[styles.originalAmount, { color: colors.gray600 }]}
+                  >
+                    Nominal: {formatCurrency(payment.amount)}
+                  </Text>
+                  {creditApplied > 0 && (
+                    <Text
+                      style={[styles.creditUsed, { color: colors.success }]}
+                    >
+                      Credit digunakan: {formatCurrency(creditApplied)}
+                    </Text>
+                  )}
+                  <Text style={[styles.amountText, { color: colors.primary }]}>
+                    Yang harus dibayar: {formatCurrency(effectiveAmount)}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.periodTitle, { color: colors.gray900 }]}>
+                    Pembayaran Custom
+                  </Text>
+                  <View style={styles.customInputContainer}>
+                    <Text
+                      style={[
+                        styles.customInputLabel,
+                        { color: colors.gray700 },
+                      ]}
+                    >
+                      Nominal (Rp):
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.customInput,
+                        { borderColor: colors.gray300, color: colors.gray900 },
+                      ]}
+                      value={customAmount}
+                      onChangeText={handleCustomAmountChange}
+                      placeholder="Masukkan nominal"
+                      placeholderTextColor={colors.gray500}
+                      keyboardType="numeric"
+                    />
+                  </View>
+
+                  {paymentAllocation &&
+                    paymentAllocation.allocations.length > 0 && (
+                      <View
+                        style={[
+                          styles.allocationPreview,
+                          { backgroundColor: colors.white },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.previewTitle,
+                            { color: colors.gray900 },
+                          ]}
+                        >
+                          Preview Pembayaran:
+                        </Text>
+                        {paymentAllocation.allocations.map((alloc, index) => (
+                          <Text
+                            key={index}
+                            style={[
+                              styles.previewItem,
+                              { color: colors.success },
+                            ]}
+                          >
+                            ✅ {alloc.periodLabel}:{" "}
+                            {formatCurrency(alloc.totalAmount)}
+                          </Text>
+                        ))}
+
+                        {paymentAllocation.summary.creditUsed > 0 && (
+                          <Text
+                            style={[
+                              styles.previewCredit,
+                              { color: colors.warning },
+                            ]}
+                          >
+                            💰 Credit digunakan:{" "}
+                            {formatCurrency(
+                              paymentAllocation.summary.creditUsed
+                            )}
+                          </Text>
+                        )}
+
+                        {paymentAllocation.summary.newCreditGenerated > 0 && (
+                          <Text
+                            style={[
+                              styles.previewCredit,
+                              { color: colors.success },
+                            ]}
+                          >
+                            💰 Credit baru:{" "}
+                            {formatCurrency(
+                              paymentAllocation.summary.newCreditGenerated
+                            )}
+                          </Text>
+                        )}
+
+                        <Text
+                          style={[
+                            styles.previewFinal,
+                            { color: colors.primary },
+                          ]}
+                        >
+                          Saldo credit akhir:{" "}
+                          {formatCurrency(
+                            paymentAllocation.summary.finalCreditBalance
+                          )}
+                        </Text>
+                      </View>
+                    )}
+                </>
+              )}
             </View>
 
             <View style={styles.methodsSection}>
@@ -282,12 +572,21 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
               style={[
                 styles.payButton,
                 {
-                  backgroundColor: selectedMethod
-                    ? colors.primary
-                    : colors.gray400,
+                  backgroundColor:
+                    selectedMethod &&
+                    (effectiveAmount > 0 || (isCustomPayment && customAmount))
+                      ? colors.primary
+                      : colors.gray400,
                 },
               ]}
-              disabled={!selectedMethod || processing}
+              disabled={
+                !selectedMethod ||
+                processing ||
+                (effectiveAmount <= 0 && !isCustomPayment) ||
+                (isCustomPayment &&
+                  (!customAmount ||
+                    parseInt(customAmount.replace(/[^0-9]/g, "")) <= 0))
+              }
             />
           </View>
         </View>
@@ -305,8 +604,8 @@ const styles = StyleSheet.create({
   modalContainer: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: "90%",
-    minHeight: "70%",
+    maxHeight: "95%",
+    minHeight: "80%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -335,20 +634,101 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
   },
+  creditInfo: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  creditLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 4,
+  },
+  creditAmount: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  paymentTypeSelector: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  switchContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  switchLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
   paymentInfo: {
     padding: 20,
     borderRadius: 12,
     alignItems: "center",
-    marginVertical: 20,
+    marginBottom: 20,
   },
   periodTitle: {
     fontSize: 18,
     fontWeight: "600",
     marginBottom: 8,
   },
+  originalAmount: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  creditUsed: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
   amountText: {
     fontSize: 24,
     fontWeight: "bold",
+  },
+  customInputContainer: {
+    width: "100%",
+    marginTop: 8,
+  },
+  customInputLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 8,
+  },
+  customInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 18,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  allocationPreview: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  previewTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  previewItem: {
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  previewCredit: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  previewFinal: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 8,
+    textAlign: "center",
   },
   methodsSection: {
     marginBottom: 20,

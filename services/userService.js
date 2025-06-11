@@ -20,6 +20,7 @@ export const createUserProfile = async (uid, profileData) => {
         profile: { 
           id: uid, 
           ...profileData,
+          creditBalance: 0,
           createdAt: new Date(),
           updatedAt: new Date()
         } 
@@ -30,6 +31,7 @@ export const createUserProfile = async (uid, profileData) => {
       id: uid,
       email: profileData.email,
       role: profileData.role,
+      creditBalance: 0,
       deleted: false,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -72,6 +74,11 @@ export const getUserProfile = async (uid) => {
       
       if (profile.deleted) {
         return { success: false, error: 'User telah dihapus' };
+      }
+
+      if (profile.creditBalance === undefined) {
+        await updateDoc(docRef, { creditBalance: 0 });
+        profile.creditBalance = 0;
       }
       
       return { success: true, profile };
@@ -123,9 +130,11 @@ export const getAllSantri = async () => {
     
     const santriList = [];
     querySnapshot.forEach((doc) => {
+      const userData = doc.data();
       santriList.push({
         id: doc.id,
-        ...doc.data()
+        ...userData,
+        creditBalance: userData.creditBalance || 0
       });
     });
 

@@ -19,6 +19,10 @@ import {
   getUserDetailedPayments,
   updateUserPaymentStatus,
 } from "../../services/adminPaymentService";
+import {
+  getUserCreditBalance,
+  getCreditHistory,
+} from "../../services/creditService";
 import Button from "../../components/ui/Button";
 
 function UserPaymentDetail() {
@@ -29,10 +33,13 @@ function UserPaymentDetail() {
 
   const [payments, setPayments] = useState([]);
   const [timeline, setTimeline] = useState(null);
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [creditHistory, setCreditHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [actionModalVisible, setActionModalVisible] = useState(false);
+  const [creditModalVisible, setCreditModalVisible] = useState(false);
   const [updatingPayment, setUpdatingPayment] = useState(false);
 
   const loadData = useCallback(
@@ -40,19 +47,39 @@ function UserPaymentDetail() {
       try {
         if (!isRefresh) setLoading(true);
 
-        const result = await getUserDetailedPayments(userId);
+        const [paymentsResult, creditResult, historyResult] = await Promise.all(
+          [
+            getUserDetailedPayments(userId),
+            getUserCreditBalance(userId),
+            getCreditHistory(userId, 10),
+          ]
+        );
 
-        if (result.success) {
-          setPayments(result.payments);
-          setTimeline(result.timeline);
+        if (paymentsResult.success) {
+          setPayments(paymentsResult.payments);
+          setTimeline(paymentsResult.timeline);
         } else {
           setPayments([]);
           setTimeline(null);
+        }
+
+        if (creditResult.success) {
+          setCreditBalance(creditResult.balance);
+        } else {
+          setCreditBalance(0);
+        }
+
+        if (historyResult.success) {
+          setCreditHistory(historyResult.transactions);
+        } else {
+          setCreditHistory([]);
         }
       } catch (error) {
         console.error("Error loading user payment detail:", error);
         setPayments([]);
         setTimeline(null);
+        setCreditBalance(0);
+        setCreditHistory([]);
       } finally {
         setLoading(false);
       }
@@ -106,6 +133,10 @@ function UserPaymentDetail() {
   const handlePaymentPress = useCallback((payment) => {
     setSelectedPayment(payment);
     setActionModalVisible(true);
+  }, []);
+
+  const handleCreditHistoryPress = useCallback(() => {
+    setCreditModalVisible(true);
   }, []);
 
   const handleUpdatePaymentStatus = useCallback(
@@ -186,6 +217,24 @@ function UserPaymentDetail() {
     [colors]
   );
 
+  const formatCurrency = useCallback((amount) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
+  }, []);
+
+  const formatDate = useCallback((dateString) => {
+    if (!dateString) return "-";
+    const date = new Date(dateString);
+    return date.toLocaleDateString("id-ID", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, []);
+
   const getStatusLabel = useCallback((status) => {
     switch (status) {
       case "lunas":
@@ -212,23 +261,40 @@ function UserPaymentDetail() {
     }
   }, []);
 
-  const formatCurrency = useCallback((amount) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  }, []);
+  const renderCreditSection = useMemo(() => {
+    return (
+      <View
+        style={[
+          styles.creditCard,
+          { backgroundColor: colors.white, borderColor: colors.gray200 },
+        ]}
+      >
+        <View style={styles.creditHeader}>
+          <Text style={[styles.creditTitle, { color: colors.gray900 }]}>
+            💰 Credit Balance
+          </Text>
+          <TouchableOpacity
+            style={[styles.historyButton, { backgroundColor: colors.primary }]}
+            onPress={handleCreditHistoryPress}
+          >
+            <Text style={[styles.historyButtonText, { color: colors.white }]}>
+              History
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-  const formatDate = useCallback((dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
+        <Text style={[styles.creditAmount, { color: colors.primary }]}>
+          {formatCurrency(creditBalance)}
+        </Text>
+
+        {creditBalance > 0 && (
+          <Text style={[styles.creditNote, { color: colors.gray600 }]}>
+            Credit akan otomatis digunakan untuk pembayaran berikutnya
+          </Text>
+        )}
+      </View>
+    );
+  }, [creditBalance, colors, formatCurrency, handleCreditHistoryPress]);
 
   const renderSummaryCard = useMemo(() => {
     if (!summary) return null;
@@ -384,6 +450,28 @@ function UserPaymentDetail() {
             </Text>
           </View>
 
+          {item.creditUsed > 0 && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Credit digunakan:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.success }]}>
+                {formatCurrency(item.creditUsed)}
+              </Text>
+            </View>
+          )}
+
+          {item.actualPayment > 0 && item.actualPayment !== item.amount && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.gray600 }]}>
+                Dibayar tunai:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.primary }]}>
+                {formatCurrency(item.actualPayment)}
+              </Text>
+            </View>
+          )}
+
           {item.paymentDate && (
             <View style={styles.infoRow}>
               <Text style={[styles.labelText, { color: colors.gray600 }]}>
@@ -438,22 +526,26 @@ function UserPaymentDetail() {
   );
 
   const listData = useMemo(() => {
-    return [{ type: "summary" }, ...payments];
+    return [{ type: "summary" }, { type: "credit" }, ...payments];
   }, [payments]);
 
-  const keyExtractor = useCallback(
-    (item, index) => (item.type === "summary" ? "summary" : item.id),
-    []
-  );
+  const keyExtractor = useCallback((item, index) => {
+    if (item.type === "summary") return "summary";
+    if (item.type === "credit") return "credit";
+    return item.id;
+  }, []);
 
   const renderItem = useCallback(
     ({ item }) => {
       if (item.type === "summary") {
         return renderSummaryCard;
       }
+      if (item.type === "credit") {
+        return renderCreditSection;
+      }
       return renderPaymentItem({ item });
     },
-    [renderSummaryCard, renderPaymentItem]
+    [renderSummaryCard, renderCreditSection, renderPaymentItem]
   );
 
   const renderActionModal = useCallback(
@@ -573,6 +665,127 @@ function UserPaymentDetail() {
     ]
   );
 
+  const renderCreditModal = useCallback(
+    () => (
+      <Modal
+        visible={creditModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setCreditModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[styles.modalContainer, { backgroundColor: colors.white }]}
+          >
+            <View
+              style={[
+                styles.modalHeader,
+                { borderBottomColor: colors.gray200 },
+              ]}
+            >
+              <Text style={[styles.modalTitle, { color: colors.gray900 }]}>
+                Credit History
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.closeButton,
+                  { backgroundColor: colors.gray100 },
+                ]}
+                onPress={() => setCreditModalVisible(false)}
+              >
+                <Text
+                  style={[styles.closeButtonText, { color: colors.gray600 }]}
+                >
+                  ✕
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              <View
+                style={[
+                  styles.creditBalanceInfo,
+                  { backgroundColor: colors.primary + "10" },
+                ]}
+              >
+                <Text style={[styles.balanceLabel, { color: colors.primary }]}>
+                  Saldo Credit Saat Ini
+                </Text>
+                <Text style={[styles.balanceAmount, { color: colors.primary }]}>
+                  {formatCurrency(creditBalance)}
+                </Text>
+              </View>
+
+              {creditHistory.length > 0 ? (
+                <View style={styles.historyList}>
+                  {creditHistory.map((transaction, index) => (
+                    <View
+                      key={transaction.id}
+                      style={[
+                        styles.historyItem,
+                        { borderBottomColor: colors.gray200 },
+                      ]}
+                    >
+                      <View style={styles.historyHeader}>
+                        <Text
+                          style={[
+                            styles.historyType,
+                            {
+                              color:
+                                transaction.type === "earned"
+                                  ? colors.success
+                                  : colors.warning,
+                            },
+                          ]}
+                        >
+                          {transaction.type === "earned" ? "+" : "-"}
+                          {formatCurrency(Math.abs(transaction.amount))}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.historyDate,
+                            { color: colors.gray500 },
+                          ]}
+                        >
+                          {formatDate(
+                            transaction.timestamp?.toDate?.() ||
+                              transaction.timestamp
+                          )}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.historyDescription,
+                          { color: colors.gray700 },
+                        ]}
+                      >
+                        {transaction.description}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyHistory}>
+                  <Text style={[styles.emptyText, { color: colors.gray600 }]}>
+                    Belum ada riwayat credit
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    ),
+    [
+      creditModalVisible,
+      creditBalance,
+      creditHistory,
+      colors,
+      formatCurrency,
+      formatDate,
+    ]
+  );
+
   if (settingsLoading || loading) {
     return (
       <SafeAreaView
@@ -675,6 +888,7 @@ function UserPaymentDetail() {
       )}
 
       {renderActionModal()}
+      {renderCreditModal()}
     </SafeAreaView>
   );
 }
@@ -726,6 +940,47 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 24,
+  },
+  creditCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  creditHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  creditTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  historyButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  historyButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  creditAmount: {
+    fontSize: 28,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  creditNote: {
+    fontSize: 12,
+    textAlign: "center",
+    fontStyle: "italic",
   },
   summaryCard: {
     borderRadius: 16,
@@ -952,6 +1207,48 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   loadingSection: {
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  creditBalanceInfo: {
+    padding: 20,
+    borderRadius: 12,
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  balanceLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 8,
+  },
+  balanceAmount: {
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  historyList: {
+    marginBottom: 20,
+  },
+  historyItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  historyHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  historyType: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  historyDate: {
+    fontSize: 12,
+  },
+  historyDescription: {
+    fontSize: 14,
+  },
+  emptyHistory: {
     alignItems: "center",
     paddingVertical: 40,
   },
