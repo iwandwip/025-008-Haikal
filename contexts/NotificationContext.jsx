@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
+import { useAuth } from "./AuthContext";
 import { paymentStatusManager } from "../services/paymentStatusManager";
 
 const NotificationContext = createContext();
@@ -18,10 +19,15 @@ export const useNotification = () => {
 };
 
 export const NotificationProvider = ({ children }) => {
+  const { userProfile } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [visible, setVisible] = useState(false);
   const timeoutRefs = useRef(new Map());
   const notificationId = useRef(0);
+
+  const isUserRole = () => {
+    return userProfile && userProfile.role === "user";
+  };
 
   const addNotification = (notification) => {
     const id = ++notificationId.current;
@@ -71,6 +77,8 @@ export const NotificationProvider = ({ children }) => {
   };
 
   const showPaymentOverdueNotification = (payments) => {
+    if (!isUserRole()) return;
+
     const count = payments.length;
     const message =
       count === 1
@@ -96,6 +104,8 @@ export const NotificationProvider = ({ children }) => {
   };
 
   const showPaymentUpcomingNotification = (payments) => {
+    if (!isUserRole()) return;
+
     const count = payments.length;
     const message =
       count === 1
@@ -121,6 +131,8 @@ export const NotificationProvider = ({ children }) => {
   };
 
   const showPaymentSuccessNotification = (payment) => {
+    if (!isUserRole()) return;
+
     return addNotification({
       type: "success",
       title: "Pembayaran Berhasil",
@@ -132,6 +144,8 @@ export const NotificationProvider = ({ children }) => {
   };
 
   const showUpdateNotification = (message, type = "info") => {
+    if (!isUserRole()) return;
+
     return addNotification({
       type,
       title: "Status Diperbarui",
@@ -152,30 +166,46 @@ export const NotificationProvider = ({ children }) => {
     });
   };
 
+  const showGeneralNotification = (
+    title,
+    message,
+    type = "info",
+    options = {}
+  ) => {
+    return addNotification({
+      type,
+      title,
+      message,
+      icon:
+        options.icon ||
+        (type === "success" ? "✅" : type === "error" ? "❌" : "ℹ️"),
+      duration: options.duration || 4000,
+      actions: options.actions,
+      data: options.data,
+    });
+  };
+
   useEffect(() => {
     const unsubscribe = paymentStatusManager.addListener((type, data) => {
+      if (!isUserRole()) return;
+
       switch (type) {
         case "payments_overdue":
-          showPaymentOverdueNotification(data.payments);
-          break;
-
-        case "payments_upcoming":
-          showPaymentUpcomingNotification(data.payments);
-          break;
-
-        case "user_payment_updated":
-          if (data.source !== "manual") {
-            showUpdateNotification(
-              `Data pembayaran diperbarui (${data.source})`,
-              "success"
-            );
+          if (data.userId === userProfile?.id) {
+            showPaymentOverdueNotification(data.payments);
           }
           break;
 
-        case "all_users_updated":
-          if (data.source !== "manual") {
+        case "payments_upcoming":
+          if (data.userId === userProfile?.id) {
+            showPaymentUpcomingNotification(data.payments);
+          }
+          break;
+
+        case "user_payment_updated":
+          if (data.userId === userProfile?.id && data.source !== "manual") {
             showUpdateNotification(
-              `Data pembayaran semua santri diperbarui (${data.source})`,
+              `Data pembayaran diperbarui (${data.source})`,
               "success"
             );
           }
@@ -187,7 +217,7 @@ export const NotificationProvider = ({ children }) => {
     });
 
     return unsubscribe;
-  }, []);
+  }, [userProfile?.id, userProfile?.role]);
 
   useEffect(() => {
     return () => {
@@ -206,6 +236,7 @@ export const NotificationProvider = ({ children }) => {
     showPaymentSuccessNotification,
     showUpdateNotification,
     showErrorNotification,
+    showGeneralNotification,
   };
 
   return (

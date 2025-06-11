@@ -12,12 +12,14 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
+import { useNotification } from "../../contexts/NotificationContext";
 import Button from "../../components/ui/Button";
 import { signOutUser } from "../../services/authService";
 import { seederService } from "../../services/seederService";
 
 function AdminHome() {
   const { currentUser, userProfile } = useAuth();
+  const { showGeneralNotification } = useNotification();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [loggingOut, setLoggingOut] = useState(false);
@@ -39,6 +41,11 @@ function AdminHome() {
       setSeederStats(stats);
     } catch (error) {
       console.error("Error loading seeder stats:", error);
+      showGeneralNotification(
+        "Error",
+        "Gagal memuat statistik seeder",
+        "error"
+      );
     }
   };
 
@@ -54,7 +61,11 @@ function AdminHome() {
           if (result.success) {
             router.replace("/role-selection");
           } else {
-            Alert.alert("Gagal Logout", "Gagal keluar. Silakan coba lagi.");
+            showGeneralNotification(
+              "Gagal Logout",
+              "Gagal keluar. Silakan coba lagi.",
+              "error"
+            );
           }
           setLoggingOut(false);
         },
@@ -99,15 +110,27 @@ function AdminHome() {
                   message += `\n\n⚠️ ${result.totalErrors} akun gagal dibuat`;
                 }
 
-                Alert.alert("Seeder Berhasil", message);
+                showGeneralNotification(
+                  "Seeder Berhasil",
+                  `Berhasil membuat ${result.totalCreated} akun santri baru`,
+                  "success",
+                  { duration: 5000 }
+                );
+
+                Alert.alert("Detail Seeder", message);
               } else {
-                Alert.alert(
+                showGeneralNotification(
                   "Seeder Gagal",
-                  result.error || "Terjadi kesalahan saat generate data"
+                  result.error || "Terjadi kesalahan saat generate data",
+                  "error"
                 );
               }
             } catch (error) {
-              Alert.alert("Error", "Terjadi kesalahan: " + error.message);
+              showGeneralNotification(
+                "Error",
+                "Terjadi kesalahan: " + error.message,
+                "error"
+              );
             } finally {
               setSeederLoading(false);
             }
