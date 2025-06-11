@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +26,8 @@ function AdminHome() {
   const insets = useSafeAreaInsets();
   const [loggingOut, setLoggingOut] = useState(false);
   const [seederLoading, setSeederLoading] = useState(false);
+  const [seederModalVisible, setSeederModalVisible] = useState(false);
+  const [seederCount, setSeederCount] = useState("3");
   const [seederStats, setSeederStats] = useState({
     total: 0,
     seederUsers: 0,
@@ -73,15 +77,31 @@ function AdminHome() {
     ]);
   };
 
-  const handleSeeder = async () => {
+  const handleSeeder = () => {
+    setSeederModalVisible(true);
+  };
+
+  const handleSeederConfirm = async () => {
+    const count = parseInt(seederCount);
+
+    if (isNaN(count) || count < 1 || count > 10) {
+      Alert.alert("Error", "Jumlah akun harus antara 1-10");
+      return;
+    }
+
+    setSeederModalVisible(false);
+
     const nextUser = seederStats.nextUserNumber;
-    const nextThreeUsers = `user${nextUser}@gmail.com, user${
-      nextUser + 1
-    }@gmail.com, user${nextUser + 2}@gmail.com`;
+    const emailList = [];
+    for (let i = 0; i < count; i++) {
+      emailList.push(`user${nextUser + i}@gmail.com`);
+    }
 
     Alert.alert(
       "Generate Data Santri",
-      `Akan membuat 3 akun wali santri baru:\n${nextThreeUsers}\n\nLanjutkan?`,
+      `Akan membuat ${count} akun wali santri baru:\n${emailList.join(
+        ", "
+      )}\n\nLanjutkan?`,
       [
         { text: "Batal", style: "cancel" },
         {
@@ -90,7 +110,7 @@ function AdminHome() {
             setSeederLoading(true);
 
             try {
-              const result = await seederService.createSeederUsers(3);
+              const result = await seederService.createSeederUsers(count);
 
               if (result.success) {
                 await loadSeederStats();
@@ -276,8 +296,8 @@ function AdminHome() {
               </Text>
               <Text style={styles.menuDesc}>
                 {seederLoading
-                  ? "Sedang membuat 3 akun santri dengan data sequential..."
-                  : "Buat 3 akun santri dengan email sequential untuk testing"}
+                  ? "Sedang membuat akun santri dengan data sequential..."
+                  : "Buat akun santri dengan email sequential untuk testing"}
               </Text>
               <View style={styles.seederStats}>
                 <Text style={styles.seederStatsText}>
@@ -310,13 +330,83 @@ function AdminHome() {
         </View>
       </ScrollView>
 
+      <Modal
+        visible={seederModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => !seederLoading && setSeederModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Generate Data Santri</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setSeederModalVisible(false)}
+              >
+                <Text style={styles.closeButtonText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              <Text style={styles.inputLabel}>Jumlah Akun (1-10):</Text>
+              <TextInput
+                style={styles.numberInput}
+                value={seederCount}
+                onChangeText={setSeederCount}
+                keyboardType="numeric"
+                placeholder="Masukkan jumlah"
+                maxLength={2}
+              />
+
+              <View style={styles.previewSection}>
+                <Text style={styles.previewTitle}>Preview Email:</Text>
+                {(() => {
+                  const count = parseInt(seederCount) || 0;
+                  if (count >= 1 && count <= 10) {
+                    const emails = [];
+                    for (let i = 0; i < count; i++) {
+                      emails.push(
+                        `user${seederStats.nextUserNumber + i}@gmail.com`
+                      );
+                    }
+                    return emails.map((email, index) => (
+                      <Text key={index} style={styles.previewEmail}>
+                        {email}
+                      </Text>
+                    ));
+                  }
+                  return (
+                    <Text style={styles.previewError}>Jumlah harus 1-10</Text>
+                  );
+                })()}
+              </View>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <Button
+                title="Batal"
+                onPress={() => setSeederModalVisible(false)}
+                variant="outline"
+                style={styles.modalButton}
+              />
+              <Button
+                title="Generate"
+                onPress={handleSeederConfirm}
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {seederLoading && (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingModal}>
             <ActivityIndicator size="large" color="#ef4444" />
             <Text style={styles.loadingTitle}>Generating Data Santri</Text>
             <Text style={styles.loadingSubtitle}>
-              Membuat 3 akun dengan email sequential...
+              Membuat {seederCount} akun dengan email sequential...
             </Text>
             <Text style={styles.loadingNote}>
               Next: user{seederStats.nextUserNumber}@gmail.com
@@ -452,6 +542,100 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     borderColor: "#ef4444",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    margin: 20,
+    width: "90%",
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#64748b",
+  },
+  modalContent: {
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 12,
+  },
+  numberInput: {
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#1e293b",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  previewSection: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 8,
+    padding: 16,
+  },
+  previewTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
+    marginBottom: 8,
+  },
+  previewEmail: {
+    fontSize: 12,
+    color: "#059669",
+    fontFamily: "monospace",
+    marginBottom: 2,
+  },
+  previewError: {
+    fontSize: 12,
+    color: "#ef4444",
+    fontStyle: "italic",
+  },
+  modalFooter: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
   },
   loadingOverlay: {
     position: "absolute",
