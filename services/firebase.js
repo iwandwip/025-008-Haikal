@@ -4,13 +4,13 @@ import { getFirestore } from 'firebase/firestore';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAqnV4ykbphnJbFJibISVcLS2m-F3BrJbg",
-  authDomain: "haikal-39391.firebaseapp.com",
-  projectId: "haikal-39391",
-  storageBucket: "haikal-39391.firebasestorage.app",
-  messagingSenderId: "405686936491",
-  appId: "1:405686936491:web:877cb90133189e03e768ee",
-  measurementId: "G-P15RR8FNEK"
+  apiKey: "AIzaSyAqIV61dH1wyNNLMT0uI5otGzRVv-FMK3E",
+  authDomain: "haikal-99548.firebaseapp.com",
+  projectId: "haikal-99548",
+  storageBucket: "haikal-99548.firebasestorage.app",
+  messagingSenderId: "567375244771",
+  appId: "1:567375244771:web:49a2e0d539e61eea8c44d6",
+  measurementId: "G-TS9YVYQDKB"
 };
 
 let app;

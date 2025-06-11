@@ -285,30 +285,51 @@ const TimelinePicker = ({
           };
 
         case "hour":
-          const validHours = getValidHoursForDate(current);
-          if (!validHours || validHours.length === 0) {
-            return { min: 0, max: 23, validValues: [] };
+          const allValidTimes = getAllValidDateTime();
+          if (!allValidTimes) return { min: 0, max: 23 };
+
+          const hoursForCurrentDate = allValidTimes
+            .filter((time) => isSameDay(time, current))
+            .map((time) => time.getHours());
+
+          const uniqueHours = [...new Set(hoursForCurrentDate)].sort(
+            (a, b) => a - b
+          );
+
+          if (uniqueHours.length === 0) {
+            return { min: 0, max: 23 };
           }
 
           return {
-            min: Math.min(...validHours),
-            max: Math.max(...validHours),
-            validValues: validHours,
+            min: Math.min(...uniqueHours),
+            max: Math.max(...uniqueHours),
+            validValues: uniqueHours,
           };
 
         case "minute":
-          const validMinutes = getValidMinutesForDateHour(
-            current,
-            current.getHours()
+          const allValidTimes2 = getAllValidDateTime();
+          if (!allValidTimes2) return { min: 0, max: 59 };
+
+          const minutesForCurrentDateHour = allValidTimes2
+            .filter(
+              (time) =>
+                isSameDay(time, current) &&
+                time.getHours() === current.getHours()
+            )
+            .map((time) => time.getMinutes());
+
+          const uniqueMinutes = [...new Set(minutesForCurrentDateHour)].sort(
+            (a, b) => a - b
           );
-          if (!validMinutes || validMinutes.length === 0) {
-            return { min: 0, max: 59, validValues: [] };
+
+          if (uniqueMinutes.length === 0) {
+            return { min: 0, max: 59 };
           }
 
           return {
-            min: Math.min(...validMinutes),
-            max: Math.max(...validMinutes),
-            validValues: validMinutes,
+            min: Math.min(...uniqueMinutes),
+            max: Math.max(...uniqueMinutes),
+            validValues: uniqueMinutes,
           };
 
         case "week":
@@ -397,48 +418,54 @@ const TimelinePicker = ({
     const range = getValidRange(level);
     const options = [];
 
-    if (range.validValues && range.validValues.length > 0) {
-      range.validValues.forEach((value) => {
-        let label = value.toString();
+    if (
+      isSimulationMode() &&
+      (level === "hour" || level === "minute" || level === "day")
+    ) {
+      if (range.validValues && range.validValues.length > 0) {
+        range.validValues.forEach((value) => {
+          let label = value.toString();
 
-        switch (level) {
-          case "month":
-            label = getMonthName(value);
-            break;
-          case "week":
-            label = `Minggu ${value}`;
-            break;
-          case "hour":
-            label = `${value.toString().padStart(2, "0")}:00`;
-            break;
-          case "minute":
-            label = value.toString().padStart(2, "0");
-            break;
-        }
+          switch (level) {
+            case "month":
+              label = getMonthName(value);
+              break;
+            case "week":
+              label = `Minggu ${value}`;
+              break;
+            case "hour":
+              label = `${value.toString().padStart(2, "0")}:00`;
+              break;
+            case "minute":
+              label = value.toString().padStart(2, "0");
+              break;
+          }
 
-        options.push({ value, label });
-      });
-    } else {
-      for (let i = range.min; i <= range.max; i++) {
-        let label = i.toString();
-
-        switch (level) {
-          case "month":
-            label = getMonthName(i);
-            break;
-          case "week":
-            label = `Minggu ${i}`;
-            break;
-          case "hour":
-            label = `${i.toString().padStart(2, "0")}:00`;
-            break;
-          case "minute":
-            label = i.toString().padStart(2, "0");
-            break;
-        }
-
-        options.push({ value: i, label });
+          options.push({ value, label });
+        });
+        return options;
       }
+    }
+
+    for (let i = range.min; i <= range.max; i++) {
+      let label = i.toString();
+
+      switch (level) {
+        case "month":
+          label = getMonthName(i);
+          break;
+        case "week":
+          label = `Minggu ${i}`;
+          break;
+        case "hour":
+          label = `${i.toString().padStart(2, "0")}:00`;
+          break;
+        case "minute":
+          label = i.toString().padStart(2, "0");
+          break;
+      }
+
+      options.push({ value: i, label });
     }
 
     return options;
@@ -475,22 +502,43 @@ const TimelinePicker = ({
   const findValidTimeForSelection = (newDate, level, value) => {
     if (!isSimulationMode()) return newDate;
 
-    if (level === "hour") {
-      const validMinutes = getValidMinutesForDateHour(newDate, value);
-      if (validMinutes && validMinutes.length > 0) {
-        newDate.setMinutes(validMinutes[0]);
-        newDate.setSeconds(0, 0);
-      }
-    } else if (level === "day") {
-      const validHours = getValidHoursForDate(newDate);
-      if (validHours && validHours.length > 0) {
-        newDate.setHours(validHours[0]);
-        const validMinutes = getValidMinutesForDateHour(newDate, validHours[0]);
+    const testDate = new Date(newDate);
+
+    try {
+      if (level === "hour") {
+        testDate.setHours(value);
+        const validMinutes = getValidMinutesForDateHour(testDate, value);
         if (validMinutes && validMinutes.length > 0) {
-          newDate.setMinutes(validMinutes[0]);
-          newDate.setSeconds(0, 0);
+          testDate.setMinutes(validMinutes[0]);
+          testDate.setSeconds(0, 0);
         }
+      } else if (level === "day") {
+        testDate.setDate(value);
+        const validHours = getValidHoursForDate(testDate);
+        if (validHours && validHours.length > 0) {
+          testDate.setHours(validHours[0]);
+          const validMinutes = getValidMinutesForDateHour(
+            testDate,
+            validHours[0]
+          );
+          if (validMinutes && validMinutes.length > 0) {
+            testDate.setMinutes(validMinutes[0]);
+            testDate.setSeconds(0, 0);
+          }
+        }
+      } else if (level === "minute") {
+        testDate.setMinutes(value);
+        testDate.setSeconds(0, 0);
       }
+
+      const min = new Date(minDate);
+      const max = new Date(maxDate);
+
+      if (testDate >= min && testDate <= max) {
+        return testDate;
+      }
+    } catch (error) {
+      console.warn("Error in findValidTimeForSelection:", error);
     }
 
     return newDate;
@@ -531,33 +579,24 @@ const TimelinePicker = ({
         updated = true;
         break;
       case "hour":
-        if (isSimulationMode() && !isValidHourForDate(newDate, value)) {
-          return;
-        }
         newDate.setHours(value);
+        if (isSimulationMode()) {
+          const validMinutes = getValidMinutesForDateHour(newDate, value);
+          if (validMinutes && validMinutes.length > 0) {
+            newDate.setMinutes(validMinutes[0]);
+          }
+        }
         updated = true;
         break;
       case "minute":
-        if (
-          isSimulationMode() &&
-          !isValidMinuteForDateHour(newDate, newDate.getHours(), value)
-        ) {
-          return;
-        }
         newDate.setMinutes(value);
         updated = true;
         break;
     }
 
     if (updated) {
-      if (isSimulationMode()) {
-        const adjustedDate = findValidTimeForSelection(newDate, level, value);
-        if (isValidDateTime(adjustedDate)) {
-          setSelectedDate(adjustedDate);
-        }
-      } else {
-        setSelectedDate(newDate);
-      }
+      newDate.setSeconds(0, 0);
+      setSelectedDate(newDate);
     }
   };
 
