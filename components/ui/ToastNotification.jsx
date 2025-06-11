@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Animated,
-  PanGestureHandler,
   TouchableOpacity,
   Dimensions,
   Platform,
@@ -88,41 +87,8 @@ export default function ToastNotification() {
     }
   };
 
-  const onGestureEvent = Animated.event(
-    [{ nativeEvent: { translationX: translateX, translationY: translateY } }],
-    { useNativeDriver: true }
-  );
-
-  const onHandlerStateChange = (event) => {
-    if (event.nativeEvent.state === 5) {
-      // ENDED
-      const { translationX, translationY, velocityX, velocityY } =
-        event.nativeEvent;
-
-      if (Math.abs(translationX) > 100 || Math.abs(velocityX) > 500) {
-        Animated.timing(translateX, {
-          toValue: translationX > 0 ? SCREEN_WIDTH : -SCREEN_WIDTH,
-          duration: 200,
-          useNativeDriver: true,
-        }).start(() => {
-          dismissNotification();
-          translateX.setValue(0);
-        });
-      } else if (translationY < -50 || velocityY < -500) {
-        dismissNotification();
-      } else {
-        Animated.parallel([
-          Animated.spring(translateX, {
-            toValue: 0,
-            useNativeDriver: true,
-          }),
-          Animated.spring(translateY, {
-            toValue: insets.top + 10,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }
-    }
+  const handleSwipeUp = () => {
+    dismissNotification();
   };
 
   const getNotificationStyle = (type) => {
@@ -179,123 +145,112 @@ export default function ToastNotification() {
   }
 
   return (
-    <PanGestureHandler
-      onGestureEvent={onGestureEvent}
-      onHandlerStateChange={onHandlerStateChange}
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          transform: [{ translateY }, { translateX }, { scale }],
+          opacity,
+          zIndex: 9999,
+        },
+      ]}
     >
-      <Animated.View
+      <TouchableOpacity
         style={[
-          styles.container,
+          styles.notification,
+          getNotificationStyle(currentNotification.type),
           {
-            transform: [{ translateY }, { translateX }, { scale }],
-            opacity,
-            zIndex: 9999,
+            shadowColor: colors.shadow.color,
           },
         ]}
+        onPress={dismissNotification}
+        onLongPress={handleSwipeUp}
+        activeOpacity={0.9}
       >
-        <TouchableOpacity
-          style={[
-            styles.notification,
-            getNotificationStyle(currentNotification.type),
-            {
-              shadowColor: colors.shadow.color,
-            },
-          ]}
-          onPress={dismissNotification}
-          activeOpacity={0.9}
-        >
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <View style={styles.titleRow}>
-                {currentNotification.icon && (
-                  <Text
-                    style={[
-                      styles.icon,
-                      getIconStyle(currentNotification.type),
-                    ]}
-                  >
-                    {currentNotification.icon}
-                  </Text>
-                )}
-                <Text style={[styles.title, { color: colors.gray900 }]}>
-                  {currentNotification.title}
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <View style={styles.titleRow}>
+              {currentNotification.icon && (
+                <Text
+                  style={[styles.icon, getIconStyle(currentNotification.type)]}
+                >
+                  {currentNotification.icon}
                 </Text>
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.closeButton,
-                  { backgroundColor: colors.gray100 },
-                ]}
-                onPress={dismissNotification}
-              >
-                <Text style={[styles.closeText, { color: colors.gray600 }]}>
-                  ✕
-                </Text>
-              </TouchableOpacity>
+              )}
+              <Text style={[styles.title, { color: colors.gray900 }]}>
+                {currentNotification.title}
+              </Text>
             </View>
 
-            <Text style={[styles.message, { color: colors.gray700 }]}>
-              {currentNotification.message}
-            </Text>
-
-            {currentNotification.actions &&
-              currentNotification.actions.length > 0 && (
-                <View style={styles.actions}>
-                  {currentNotification.actions.map((action, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={[
-                        styles.actionButton,
-                        action.primary && { backgroundColor: colors.primary },
-                        !action.primary && { backgroundColor: colors.gray100 },
-                      ]}
-                      onPress={() => {
-                        action.onPress?.(currentNotification);
-                        dismissNotification();
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.actionText,
-                          action.primary && { color: colors.white },
-                          !action.primary && { color: colors.gray700 },
-                        ]}
-                      >
-                        {action.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+            <TouchableOpacity
+              style={[styles.closeButton, { backgroundColor: colors.gray100 }]}
+              onPress={dismissNotification}
+            >
+              <Text style={[styles.closeText, { color: colors.gray600 }]}>
+                ✕
+              </Text>
+            </TouchableOpacity>
           </View>
 
-          {currentNotification.autoHide && (
-            <View style={styles.progressContainer}>
-              <Animated.View
-                style={[
-                  styles.progressBar,
-                  {
-                    backgroundColor: getIconStyle(currentNotification.type)
-                      .color,
-                    width: `${Math.max(
-                      0,
-                      Math.min(
-                        100,
-                        100 -
-                          ((Date.now() - currentNotification.timestamp) /
-                            currentNotification.duration) *
-                            100
-                      )
-                    )}%`,
-                  },
-                ]}
-              />
-            </View>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    </PanGestureHandler>
+          <Text style={[styles.message, { color: colors.gray700 }]}>
+            {currentNotification.message}
+          </Text>
+
+          {currentNotification.actions &&
+            currentNotification.actions.length > 0 && (
+              <View style={styles.actions}>
+                {currentNotification.actions.map((action, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.actionButton,
+                      action.primary && { backgroundColor: colors.primary },
+                      !action.primary && { backgroundColor: colors.gray100 },
+                    ]}
+                    onPress={() => {
+                      action.onPress?.(currentNotification);
+                      dismissNotification();
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.actionText,
+                        action.primary && { color: colors.white },
+                        !action.primary && { color: colors.gray700 },
+                      ]}
+                    >
+                      {action.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+        </View>
+
+        {currentNotification.autoHide && (
+          <View style={styles.progressContainer}>
+            <Animated.View
+              style={[
+                styles.progressBar,
+                {
+                  backgroundColor: getIconStyle(currentNotification.type).color,
+                  width: `${Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      100 -
+                        ((Date.now() - currentNotification.timestamp) /
+                          currentNotification.duration) *
+                          100
+                    )
+                  )}%`,
+                },
+              ]}
+            />
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 }
 
