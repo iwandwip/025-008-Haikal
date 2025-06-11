@@ -64,6 +64,7 @@ export default function DaftarSantri() {
     >
       <View style={styles.santriInfo}>
         <Text style={styles.namaSantri}>{item.namaSantri}</Text>
+        <Text style={styles.emailSantri}>{item.email}</Text>
         <Text style={styles.namaWali}>Wali: {item.namaWali}</Text>
         <Text style={styles.noHp}>HP: {item.noHpWali}</Text>
       </View>
@@ -231,6 +232,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    minHeight: 90,
   },
   santriInfo: {
     flex: 1,
@@ -240,6 +242,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1e293b",
     marginBottom: 4,
+  },
+  emailSantri: {
+    fontSize: 13,
+    color: "#6b7280",
+    fontStyle: "italic",
+    marginBottom: 6,
   },
   namaWali: {
     fontSize: 14,

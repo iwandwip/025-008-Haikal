@@ -180,10 +180,7 @@ export default function DetailSantri() {
             {
               text: "OK",
               onPress: () => {
-                router.back();
-                setTimeout(() => {
-                  router.push("/(admin)/daftar-santri");
-                }, 100);
+                router.replace("/(admin)/daftar-santri");
               },
             },
           ]
