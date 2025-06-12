@@ -16,6 +16,7 @@ import {
   getUserProfile,
   deleteSantri,
   updateSantriRFID,
+  deleteSantriRFID,
 } from "../../services/userService";
 import {
   startPairing,
@@ -77,10 +78,10 @@ export default function DetailSantri() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleRFIDReceived = async (rfidCode) => {
+  const handleRFIDReceived = async (rfidData) => {
     Alert.alert(
       "RFID Terdeteksi",
-      `RFID Code: ${rfidCode}\n\nApakah Anda ingin menyimpan RFID ini untuk ${santri?.namaSantri}?`,
+      `RFID Code: ${rfidData.rfidCode}\n\nApakah Anda ingin menyimpan RFID ini untuk ${santri?.namaSantri}?`,
       [
         {
           text: "Batal",
@@ -90,7 +91,7 @@ export default function DetailSantri() {
         {
           text: "Simpan",
           onPress: async () => {
-            const result = await updateSantriRFID(santriId, rfidCode);
+            const result = await updateSantriRFID(santriId, rfidData.rfidCode);
             await cancelPairing();
             if (result.success) {
               Alert.alert("Berhasil", "RFID berhasil dipasangkan!");
@@ -193,6 +194,66 @@ export default function DetailSantri() {
     }
 
     setDeleting(false);
+  };
+
+  const handleDeleteRFID = () => {
+    Alert.alert(
+      "Hapus RFID",
+      `Apakah Anda yakin ingin menghapus RFID untuk ${santri?.namaSantri}?\n\nRFID: ${santri?.rfidSantri}\n\nSetelah dihapus, santri tidak akan bisa menggunakan kartu RFID untuk pembayaran.`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Ya, Hapus",
+          style: "destructive",
+          onPress: confirmDeleteRFID,
+        },
+      ]
+    );
+  };
+
+  const confirmDeleteRFID = async () => {
+    try {
+      const result = await deleteSantriRFID(santriId);
+      if (result.success) {
+        Alert.alert("Berhasil", "RFID berhasil dihapus!");
+        loadSantriData();
+      } else {
+        Alert.alert("Error", `Gagal menghapus RFID: ${result.error}`);
+      }
+    } catch (error) {
+      Alert.alert("Error", `Terjadi kesalahan: ${error.message}`);
+    }
+  };
+
+  const handleRePairing = () => {
+    Alert.alert(
+      "Ganti RFID",
+      `Apakah Anda ingin mengganti RFID untuk ${santri?.namaSantri}?\n\nRFID saat ini: ${santri?.rfidSantri}\n\nRFID lama akan diganti dengan yang baru.`,
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Ya, Ganti",
+          onPress: startRePairing,
+        },
+      ]
+    );
+  };
+
+  const startRePairing = async () => {
+    try {
+      const result = await startPairing(santriId);
+      if (result.success) {
+        Alert.alert(
+          "Mode Pairing Aktif",
+          "Silakan tempelkan kartu RFID baru pada ESP32.\n\nPairing akan timeout dalam 30 detik."
+        );
+        loadPairingStatus();
+      } else {
+        Alert.alert("Error", result.error || "Gagal memulai pairing");
+      }
+    } catch (error) {
+      Alert.alert("Error", `Terjadi kesalahan: ${error.message}`);
+    }
   };
 
   if (loading) {
@@ -376,12 +437,22 @@ export default function DetailSantri() {
                 />
               )}
 
-              {santri.rfidSantri && (
-                <View style={styles.infoBox}>
-                  <Text style={styles.infoBoxText}>
-                    ℹ️ RFID sudah terpasang. Hubungi admin jika perlu mengganti
-                    RFID.
-                  </Text>
+              {santri.rfidSantri && !isPairingActive && (
+                <View style={styles.rfidManagement}>
+                  <Button
+                    title="🔄 Ganti RFID"
+                    onPress={handleRePairing}
+                    variant="secondary"
+                    style={styles.rePairingButton}
+                    disabled={deleting}
+                  />
+                  <Button
+                    title="🗑️ Hapus RFID"
+                    onPress={handleDeleteRFID}
+                    variant="outline"
+                    style={styles.deleteRFIDButton}
+                    disabled={deleting}
+                  />
                 </View>
               )}
             </View>
@@ -630,5 +701,16 @@ const styles = StyleSheet.create({
     color: "#0369a1",
     lineHeight: 20,
     textAlign: "center",
+  },
+  rfidManagement: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  rePairingButton: {
+    flex: 1,
+  },
+  deleteRFIDButton: {
+    flex: 1,
   },
 });

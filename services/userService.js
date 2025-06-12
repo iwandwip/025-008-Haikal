@@ -158,6 +158,26 @@ export const updateSantriRFID = async (santriId, rfidCode) => {
   }
 };
 
+export const deleteSantriRFID = async (santriId) => {
+  try {
+    if (!db) {
+      throw new Error('Firestore belum diinisialisasi');
+    }
+
+    const santriRef = doc(db, 'users', santriId);
+    await updateDoc(santriRef, {
+      rfidSantri: null,
+      updatedAt: new Date()
+    });
+
+    console.log('RFID santri berhasil dihapus');
+    return { success: true };
+  } catch (error) {
+    console.error('Error menghapus RFID santri:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 export const deleteSantri = async (santriId) => {
   try {
     if (!db) {
