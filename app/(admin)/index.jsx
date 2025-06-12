@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -28,6 +29,7 @@ function AdminHome() {
   const [seederLoading, setSeederLoading] = useState(false);
   const [seederModalVisible, setSeederModalVisible] = useState(false);
   const [seederCount, setSeederCount] = useState("3");
+  const [refreshing, setRefreshing] = useState(false);
   const [seederStats, setSeederStats] = useState({
     total: 0,
     seederUsers: 0,
@@ -50,6 +52,27 @@ function AdminHome() {
         "Gagal memuat statistik seeder",
         "error"
       );
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadSeederStats();
+      showGeneralNotification(
+        "Data Diperbarui",
+        "Statistik seeder berhasil dimuat ulang",
+        "success",
+        { duration: 2000 }
+      );
+    } catch (error) {
+      showGeneralNotification(
+        "Error",
+        "Gagal memuat ulang data",
+        "error"
+      );
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -185,6 +208,16 @@ function AdminHome() {
           { paddingBottom: insets.bottom + 40 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#3b82f6"]}
+            tintColor="#3b82f6"
+            title="Tarik untuk memuat ulang..."
+            titleColor="#64748b"
+          />
+        }
       >
         <View style={styles.headerSection}>
           <Text style={styles.title}>Dashboard Admin</Text>

@@ -17,6 +17,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useNotification } from "../../contexts/NotificationContext";
 import { getColors } from "../../constants/Colors";
+import { formatDate } from "../../utils/dateUtils";
 import { paymentStatusManager } from "../../services/paymentStatusManager";
 import { getAllUsersPaymentStatus } from "../../services/adminPaymentService";
 
@@ -140,15 +141,6 @@ function PaymentStatus() {
     }).format(amount);
   }, []);
 
-  const formatDate = useCallback((dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
 
   const getStatusColor = useCallback(
     (percentage) => {

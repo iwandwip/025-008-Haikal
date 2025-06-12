@@ -8,16 +8,78 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
 import Button from "./Button";
 
-const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
+const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalance = 0 }) => {
   const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [paymentMode, setPaymentMode] = useState('exact');
+  const [customAmount, setCustomAmount] = useState('');
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const calculatePaymentAmount = () => {
+    if (!payment) return {
+      originalAmount: 0,
+      baseAmount: 0,
+      creditApplied: 0,
+      amountAfterCredit: 0,
+      payableToBePaid: 0,
+      excessAmount: 0,
+      willBecomeCredit: 0
+    };
+    
+    const baseAmount = payment.remainingAmount || payment.amount;
+    const creditApplied = Math.min(creditBalance, baseAmount);
+    const amountAfterCredit = Math.max(0, baseAmount - creditApplied);
+    
+    let payableToBePaid = amountAfterCredit;
+    let excessAmount = 0;
+    let willBecomeCredit = 0;
+    
+    if (paymentMode === 'custom' && customAmount) {
+      const customAmountNum = parseInt(customAmount) || 0;
+      payableToBePaid = customAmountNum;
+      
+      if (customAmountNum > amountAfterCredit) {
+        excessAmount = customAmountNum - amountAfterCredit;
+        const maxCredit = payment.amount * 3;
+        willBecomeCredit = Math.min(excessAmount, maxCredit - creditBalance);
+      }
+    }
+    
+    return {
+      originalAmount: payment.amount,
+      baseAmount,
+      creditApplied,
+      amountAfterCredit,
+      payableToBePaid,
+      excessAmount,
+      willBecomeCredit
+    };
+  };
+
+  const { 
+    originalAmount, 
+    baseAmount, 
+    creditApplied, 
+    amountAfterCredit, 
+    payableToBePaid, 
+    excessAmount, 
+    willBecomeCredit 
+  } = calculatePaymentAmount();
 
   if (!payment) return null;
 
@@ -66,20 +128,12 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
     },
   ];
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const handleMethodSelect = (method) => {
     setSelectedMethod(method);
   };
 
   const handlePayNow = async () => {
-    if (!selectedMethod) {
+    if ((amountAfterCredit || 0) > 0 && !selectedMethod) {
       Alert.alert(
         "Pilih Metode",
         "Silakan pilih metode pembayaran terlebih dahulu"
@@ -87,21 +141,41 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
       return;
     }
 
+    // Validate custom amount
+    if (paymentMode === 'custom' && customAmount) {
+      const customAmountNum = parseInt(customAmount) || 0;
+      if (customAmountNum < (amountAfterCredit || 0)) {
+        Alert.alert(
+          "Jumlah Tidak Valid",
+          `Minimum pembayaran adalah ${formatCurrency(amountAfterCredit || 0)}`
+        );
+        return;
+      }
+    }
+
     setProcessing(true);
 
+    const finalAmount = paymentMode === 'custom' && customAmount 
+      ? parseInt(customAmount) 
+      : (amountAfterCredit || 0);
+
     setTimeout(() => {
+      const successMessage = (excessAmount || 0) > 0 
+        ? `Pembayaran ${payment.periodData?.label} berhasil! Kelebihan ${formatCurrency(willBecomeCredit || 0)} menjadi credit.`
+        : `Pembayaran ${payment.periodData?.label} sebesar ${formatCurrency(finalAmount || 0)} berhasil diproses.`;
+
       Alert.alert(
         "Pembayaran Berhasil! 🎉",
-        `Pembayaran ${payment.periodData?.label} sebesar ${formatCurrency(
-          payment.amount
-        )} berhasil diproses melalui ${selectedMethod.name}.`,
+        successMessage,
         [
           {
             text: "OK",
             onPress: () => {
               setProcessing(false);
               setSelectedMethod(null);
-              onPaymentSuccess(payment, selectedMethod.id);
+              setPaymentMode('exact');
+              setCustomAmount('');
+              onPaymentSuccess(payment, selectedMethod?.id || 'credit', finalAmount);
               onClose();
             },
           },
@@ -113,6 +187,8 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
   const handleClose = () => {
     if (!processing) {
       setSelectedMethod(null);
+      setPaymentMode('exact');
+      setCustomAmount('');
       onClose();
     }
   };
@@ -166,18 +242,123 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
               ]}
             >
               <Text style={[styles.periodTitle, { color: colors.gray900 }]}>
-                {payment.periodData?.label ||
-                  `Periode ${payment.periodData?.number}`}
+                💳 {payment.periodData?.label || `Periode ${payment.periodData?.number}`}
               </Text>
-              <Text style={[styles.amountText, { color: colors.primary }]}>
-                {formatCurrency(payment.amount)}
+              <Text style={[styles.originalAmountText, { color: colors.gray600 }]}>
+                Nominal: {formatCurrency(originalAmount || 0)}
               </Text>
+              
+              {creditApplied > 0 && (
+                <View style={styles.creditSection}>
+                  <Text style={[styles.creditText, { color: colors.green }]}>
+                    💰 Credit: -{formatCurrency(creditApplied || 0)}
+                  </Text>
+                  <View style={[styles.divider, { backgroundColor: colors.gray300 }]} />
+                </View>
+              )}
+              
+              <Text style={[styles.finalAmountText, { color: colors.primary }]}>
+                Yang harus dibayar: {formatCurrency(amountAfterCredit || 0)}
+              </Text>
+              
+              {(amountAfterCredit || 0) === 0 && (
+                <Text style={[styles.paidWithCreditText, { color: colors.green }]}>
+                  ✅ Lunas dengan Credit
+                </Text>
+              )}
             </View>
 
-            <View style={styles.methodsSection}>
-              <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
-                Pilih Metode Pembayaran:
-              </Text>
+            {(amountAfterCredit || 0) > 0 && (
+              <View style={styles.paymentModeSection}>
+                <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
+                  Mode Pembayaran:
+                </Text>
+                <View style={styles.paymentModeButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeButton,
+                      {
+                        backgroundColor: paymentMode === 'exact' ? colors.primary : colors.gray100,
+                        borderColor: paymentMode === 'exact' ? colors.primary : colors.gray300,
+                      },
+                    ]}
+                    onPress={() => setPaymentMode('exact')}
+                  >
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        { color: paymentMode === 'exact' ? colors.white : colors.gray700 },
+                      ]}
+                    >
+                      Bayar Pas
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modeButton,
+                      {
+                        backgroundColor: paymentMode === 'custom' ? colors.primary : colors.gray100,
+                        borderColor: paymentMode === 'custom' ? colors.primary : colors.gray300,
+                      },
+                    ]}
+                    onPress={() => setPaymentMode('custom')}
+                  >
+                    <Text
+                      style={[
+                        styles.modeButtonText,
+                        { color: paymentMode === 'custom' ? colors.white : colors.gray700 },
+                      ]}
+                    >
+                      Bayar Custom
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {paymentMode === 'custom' && (
+                  <View style={styles.customAmountSection}>
+                    <Text style={[styles.customAmountLabel, { color: colors.gray700 }]}>
+                      Jumlah Pembayaran:
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.customAmountInput,
+                        {
+                          backgroundColor: colors.white,
+                          borderColor: colors.gray300,
+                          color: colors.gray900,
+                        },
+                      ]}
+                      placeholder={`Min: ${formatCurrency(amountAfterCredit || 0)}`}
+                      value={customAmount}
+                      onChangeText={setCustomAmount}
+                      keyboardType="numeric"
+                    />
+                    
+                    {(excessAmount || 0) > 0 && (
+                      <View style={[styles.excessPreview, { backgroundColor: colors.primary + '10' }]}>
+                        <Text style={[styles.excessText, { color: colors.primary }]}>
+                          💡 Kelebihan Pembayaran:
+                        </Text>
+                        <Text style={[styles.excessAmount, { color: colors.gray700 }]}>
+                          {formatCurrency(excessAmount || 0)} → Credit {formatCurrency(willBecomeCredit || 0)}
+                        </Text>
+                        {(willBecomeCredit || 0) < (excessAmount || 0) && (
+                          <Text style={[styles.excessWarning, { color: colors.warning }]}>
+                            ⚠️ Credit dibatasi maksimal 3x nominal periode
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {amountAfterCredit > 0 && (
+              <View style={styles.methodsSection}>
+                <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
+                  Pilih Metode Pembayaran:
+                </Text>
 
               {paymentMethods.map((method) => (
                 <TouchableOpacity
@@ -247,7 +428,8 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
                   )}
                 </TouchableOpacity>
               ))}
-            </View>
+              </View>
+            )}
 
             {processing && (
               <View style={styles.processingSection}>
@@ -276,19 +458,29 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess }) => {
               style={[styles.cancelButton, { borderColor: colors.gray400 }]}
               disabled={processing}
             />
-            <Button
-              title={processing ? "Memproses..." : "Bayar Sekarang"}
-              onPress={handlePayNow}
-              style={[
-                styles.payButton,
-                {
-                  backgroundColor: selectedMethod
-                    ? colors.primary
-                    : colors.gray400,
-                },
-              ]}
-              disabled={!selectedMethod || processing}
-            />
+            
+            {(amountAfterCredit || 0) === 0 ? (
+              <Button
+                title="Gunakan Credit"
+                onPress={handlePayNow}
+                style={[styles.payButton, { backgroundColor: colors.green }]}
+                disabled={processing}
+              />
+            ) : (
+              <Button
+                title={processing ? "Memproses..." : "Bayar Sekarang"}
+                onPress={handlePayNow}
+                style={[
+                  styles.payButton,
+                  {
+                    backgroundColor: selectedMethod
+                      ? colors.primary
+                      : colors.gray400,
+                  },
+                ]}
+                disabled={!selectedMethod || processing}
+              />
+            )}
           </View>
         </View>
       </View>
@@ -349,6 +541,89 @@ const styles = StyleSheet.create({
   amountText: {
     fontSize: 24,
     fontWeight: "bold",
+  },
+  originalAmountText: {
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  creditSection: {
+    marginVertical: 8,
+    alignItems: 'center',
+  },
+  creditText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+    marginVertical: 4,
+  },
+  finalAmountText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 8,
+  },
+  paidWithCreditText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  paymentModeSection: {
+    marginBottom: 20,
+  },
+  paymentModeButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  customAmountSection: {
+    marginTop: 12,
+  },
+  customAmountLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  customAmountInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+  },
+  excessPreview: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+  },
+  excessText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  excessAmount: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  excessWarning: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   methodsSection: {
     marginBottom: 20,

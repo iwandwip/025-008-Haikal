@@ -153,7 +153,7 @@ export const updateTimelineSimulationDate = async (simulationDateTime) => {
   }
 };
 
-export const deleteActiveTimeline = async () => {
+export const deleteActiveTimeline = async (deletePaymentData = false) => {
   try {
     if (!db) {
       throw new Error('Firestore belum diinisialisasi');
@@ -167,16 +167,56 @@ export const deleteActiveTimeline = async () => {
     const timeline = timelineResult.timeline;
     const batch = writeBatch(db);
 
-    Object.keys(timeline.periods).forEach(periodKey => {
-      const periodRef = doc(db, 'payments', timeline.id, 'periods', periodKey);
-      batch.delete(periodRef);
-    });
+    if (deletePaymentData) {
+      // Delete all payment data for this timeline including santri payments
+      for (const periodKey of Object.keys(timeline.periods)) {
+        // Get all santri payments for this period
+        const santriPaymentsRef = collection(db, 'payments', timeline.id, 'periods', periodKey, 'santri_payments');
+        const santriSnapshot = await getDocs(santriPaymentsRef);
+        
+        // Delete each santri payment
+        santriSnapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        
+        // Delete the period document
+        const periodRef = doc(db, 'payments', timeline.id, 'periods', periodKey);
+        batch.delete(periodRef);
+      }
 
+      // Delete the main payments collection document
+      const paymentsRef = doc(db, 'payments', timeline.id);
+      batch.delete(paymentsRef);
+
+      // Optional: Reset credit balance for all users
+      // Get all users to reset their credit balance
+      const usersRef = collection(db, 'users');
+      const usersSnapshot = await getDocs(usersRef);
+      
+      usersSnapshot.docs.forEach(userDoc => {
+        const userData = userDoc.data();
+        if (userData.creditBalance && userData.creditBalance > 0) {
+          // Reset credit balance to 0
+          batch.update(userDoc.ref, { 
+            creditBalance: 0,
+            updatedAt: new Date()
+          });
+        }
+      });
+    }
+
+    // Always delete the timeline itself
     const timelineRef = doc(db, 'active_timeline', 'current');
     batch.delete(timelineRef);
 
     await batch.commit();
-    return { success: true };
+    
+    return { 
+      success: true, 
+      message: deletePaymentData 
+        ? 'Timeline dan data pembayaran berhasil dihapus'
+        : 'Timeline berhasil dihapus, data pembayaran dipertahankan'
+    };
   } catch (error) {
     console.error('Error deleting active timeline:', error);
     return { success: false, error: error.message };

@@ -18,18 +18,26 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { useNotification } from "../../contexts/NotificationContext";
 import { getColors } from "../../constants/Colors";
 import PaymentModal from "../../components/ui/PaymentModal";
+import CreditBalance from "../../components/ui/CreditBalance";
+import { formatDate } from "../../utils/dateUtils";
 import { paymentStatusManager } from "../../services/paymentStatusManager";
 import {
   getWaliPaymentHistory,
   getPaymentSummary,
   updateWaliPaymentStatus,
+  getCreditBalance,
+  processPaymentWithCredit,
 } from "../../services/waliPaymentService";
 
 function StatusPembayaran() {
   const { userProfile } = useAuth();
   const { theme, loading: settingsLoading } = useSettings();
-  const { showPaymentSuccessNotification, showErrorNotification } =
-    useNotification();
+  const { 
+    showPaymentSuccessNotification, 
+    showErrorNotification,
+    showPaymentWithCreditNotification,
+    showCreditBalanceNotification
+  } = useNotification();
   const colors = getColors(theme);
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
@@ -40,6 +48,7 @@ function StatusPembayaran() {
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [creditBalance, setCreditBalance] = useState(0);
 
   const loadData = useCallback(
     async (isRefresh = false, useCache = true) => {
@@ -75,6 +84,11 @@ function StatusPembayaran() {
             setSummary(null);
             setTimeline(null);
           }
+        }
+
+        const creditResult = await getCreditBalance(userProfile.id);
+        if (creditResult.success) {
+          setCreditBalance(creditResult.creditBalance);
         }
       } catch (error) {
         console.error("Error loading payment data:", error);
@@ -141,25 +155,41 @@ function StatusPembayaran() {
   }, []);
 
   const handlePaymentSuccess = useCallback(
-    async (payment, paymentMethod) => {
+    async (payment, paymentMethod, customAmount = null) => {
       setUpdatingPayment(true);
 
       try {
-        const result = await updateWaliPaymentStatus(
+        // Determine payment amount
+        const paymentAmount = customAmount || (payment.remainingAmount || payment.amount);
+        
+        const result = await processPaymentWithCredit(
           timeline.id,
           payment.periodKey,
           userProfile.id,
-          {
-            status: "lunas",
-            paymentDate: new Date().toISOString(),
-            paymentMethod: paymentMethod,
-            notes: `Pembayaran melalui ${paymentMethod}`,
-          }
+          paymentAmount,
+          paymentMethod
         );
 
         if (result.success) {
           await loadData(true, false);
-          showPaymentSuccessNotification(payment);
+          
+          // Show appropriate notification based on result
+          if (result.excessCredit > 0) {
+            showPaymentWithCreditNotification(
+              payment, 
+              result.creditApplied, 
+              0 // remaining amount is 0 since payment is complete
+            );
+            showCreditBalanceNotification(result.newCreditBalance);
+          } else if (result.creditApplied > 0) {
+            showPaymentWithCreditNotification(
+              payment, 
+              result.creditApplied, 
+              0
+            );
+          } else {
+            showPaymentSuccessNotification(payment);
+          }
 
           paymentStatusManager.clearUserCache(userProfile.id);
         } else {
@@ -179,6 +209,8 @@ function StatusPembayaran() {
       userProfile?.id,
       loadData,
       showPaymentSuccessNotification,
+      showPaymentWithCreditNotification,
+      showCreditBalanceNotification,
       showErrorNotification,
     ]
   );
@@ -207,15 +239,6 @@ function StatusPembayaran() {
     }).format(amount);
   }, []);
 
-  const formatDate = useCallback((dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
 
   const getStatusLabel = useCallback((status) => {
     switch (status) {
@@ -260,12 +283,12 @@ function StatusPembayaran() {
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
             <Text style={[styles.progressText, { color: colors.gray700 }]}>
-              Progress: {summary.lunas}/{summary.total} periode
+              Progress: {summary.lunas || 0}/{summary.total || 0} periode
             </Text>
             <Text
               style={[styles.progressPercentage, { color: colors.primary }]}
             >
-              {summary.progressPercentage}%
+              {summary.progressPercentage || 0}%
             </Text>
           </View>
 
@@ -277,7 +300,7 @@ function StatusPembayaran() {
                 styles.progressFill,
                 {
                   backgroundColor: colors.success,
-                  width: `${summary.progressPercentage}%`,
+                  width: `${summary.progressPercentage || 0}%`,
                 },
               ]}
             />
@@ -288,7 +311,7 @@ function StatusPembayaran() {
           <View style={styles.statRow}>
             <View style={styles.statItem}>
               <Text style={[styles.statNumber, { color: colors.success }]}>
-                {summary.lunas}
+                {summary.lunas || 0}
               </Text>
               <Text style={[styles.statLabel, { color: colors.gray600 }]}>
                 Lunas
@@ -297,17 +320,17 @@ function StatusPembayaran() {
 
             <View style={styles.statItem}>
               <Text style={[styles.statNumber, { color: colors.error }]}>
-                {summary.belumBayar}
+                {summary.belumBayar || 0}
               </Text>
               <Text style={[styles.statLabel, { color: colors.gray600 }]}>
                 Belum Bayar
               </Text>
             </View>
 
-            {summary.terlambat > 0 && (
+            {(summary.terlambat || 0) > 0 && (
               <View style={styles.statItem}>
                 <Text style={[styles.statNumber, { color: colors.warning }]}>
-                  {summary.terlambat}
+                  {summary.terlambat || 0}
                 </Text>
                 <Text style={[styles.statLabel, { color: colors.gray600 }]}>
                   Terlambat
@@ -322,7 +345,7 @@ function StatusPembayaran() {
                 Total Tagihan:
               </Text>
               <Text style={[styles.amountValue, { color: colors.gray900 }]}>
-                {formatCurrency(summary.totalAmount)}
+                {formatCurrency(summary.totalAmount || 0)}
               </Text>
             </View>
 
@@ -331,7 +354,7 @@ function StatusPembayaran() {
                 Sudah Dibayar:
               </Text>
               <Text style={[styles.amountValue, { color: colors.success }]}>
-                {formatCurrency(summary.paidAmount)}
+                {formatCurrency(summary.paidAmount || 0)}
               </Text>
             </View>
 
@@ -340,7 +363,7 @@ function StatusPembayaran() {
                 Belum Dibayar:
               </Text>
               <Text style={[styles.amountValue, { color: colors.error }]}>
-                {formatCurrency(summary.unpaidAmount)}
+                {formatCurrency(summary.unpaidAmount || 0)}
               </Text>
             </View>
           </View>
@@ -391,9 +414,31 @@ function StatusPembayaran() {
               Nominal:
             </Text>
             <Text style={[styles.valueText, { color: colors.gray900 }]}>
-              {formatCurrency(item.amount)}
+              {formatCurrency(item.amount || 0)}
             </Text>
           </View>
+
+          {(item.creditApplied || 0) > 0 && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.green }]}>
+                💰 Credit Applied:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.green }]}>
+                -{formatCurrency(item.creditApplied || 0)}
+              </Text>
+            </View>
+          )}
+
+          {(item.remainingAmount || 0) > 0 && (item.remainingAmount || 0) < (item.amount || 0) && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.labelText, { color: colors.primary }]}>
+                Sisa Bayar:
+              </Text>
+              <Text style={[styles.valueText, { color: colors.primary }]}>
+                {formatCurrency(item.remainingAmount || 0)}
+              </Text>
+            </View>
+          )}
 
           {item.paymentDate && (
             <View style={styles.infoRow}>
@@ -460,18 +505,25 @@ function StatusPembayaran() {
       getStatusIcon,
       getStatusLabel,
       formatCurrency,
-      formatDate,
       handlePayNow,
       updatingPayment,
     ]
   );
 
   const listData = useMemo(() => {
-    return [{ type: "summary" }, ...payments];
-  }, [payments]);
+    const items = [{ type: "summary" }];
+    if ((creditBalance || 0) > 0) {
+      items.push({ type: "credit", creditBalance: creditBalance || 0 });
+    }
+    return [...items, ...(payments || [])];
+  }, [payments, creditBalance]);
 
   const keyExtractor = useCallback(
-    (item, index) => (item.type === "summary" ? "summary" : item.id),
+    (item, index) => {
+      if (item.type === "summary") return "summary";
+      if (item.type === "credit") return "credit";
+      return item.id;
+    },
     []
   );
 
@@ -479,6 +531,9 @@ function StatusPembayaran() {
     ({ item }) => {
       if (item.type === "summary") {
         return renderSummaryCard;
+      }
+      if (item.type === "credit") {
+        return <CreditBalance creditBalance={item.creditBalance} />;
       }
       return renderPaymentItem({ item });
     },
@@ -599,6 +654,7 @@ function StatusPembayaran() {
       <PaymentModal
         visible={paymentModalVisible}
         payment={selectedPayment}
+        creditBalance={creditBalance}
         onClose={() => setPaymentModalVisible(false)}
         onPaymentSuccess={handlePaymentSuccess}
       />

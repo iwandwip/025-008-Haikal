@@ -166,6 +166,73 @@ export const NotificationProvider = ({ children }) => {
     });
   };
 
+  const showCreditAppliedNotification = (creditAmount, periodLabel) => {
+    if (!isUserRole()) return;
+
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    return addNotification({
+      type: "success",
+      title: "Credit Digunakan",
+      message: `Credit ${formatCurrency(creditAmount)} berhasil diterapkan untuk ${periodLabel}`,
+      icon: "💰",
+      duration: 4000,
+      data: { creditAmount, periodLabel, type: "credit_applied" },
+    });
+  };
+
+  const showCreditBalanceNotification = (newBalance) => {
+    if (!isUserRole()) return;
+
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    return addNotification({
+      type: "info",
+      title: "Saldo Credit Diperbarui",
+      message: `Saldo credit Anda sekarang: ${formatCurrency(newBalance)}`,
+      icon: "💰",
+      duration: 3000,
+      data: { newBalance, type: "credit_balance_updated" },
+    });
+  };
+
+  const showPaymentWithCreditNotification = (payment, creditUsed, remainingAmount) => {
+    if (!isUserRole()) return;
+
+    const formatCurrency = (amount) => {
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+        minimumFractionDigits: 0,
+      }).format(amount);
+    };
+
+    const message = remainingAmount > 0 
+      ? `${payment.periodData?.label}: Credit ${formatCurrency(creditUsed)} diterapkan. Sisa ${formatCurrency(remainingAmount)}`
+      : `${payment.periodData?.label}: Lunas dengan credit ${formatCurrency(creditUsed)}`;
+
+    return addNotification({
+      type: "success",
+      title: "Pembayaran dengan Credit",
+      message,
+      icon: "💳",
+      duration: 4000,
+      data: { payment, creditUsed, remainingAmount, type: "payment_with_credit" },
+    });
+  };
+
   const showGeneralNotification = (
     title,
     message,
@@ -237,6 +304,9 @@ export const NotificationProvider = ({ children }) => {
     showUpdateNotification,
     showErrorNotification,
     showGeneralNotification,
+    showCreditAppliedNotification,
+    showCreditBalanceNotification,
+    showPaymentWithCreditNotification,
   };
 
   return (

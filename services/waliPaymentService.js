@@ -4,11 +4,13 @@ import {
   query, 
   where,
   doc,
+  getDoc,
   updateDoc,
   setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getActiveTimeline, calculatePaymentStatus } from './timelineService';
+import { toISOString } from '../utils/dateUtils';
 
 let cachedPayments = new Map();
 let cachedTimeline = null;
@@ -85,6 +87,8 @@ export const getWaliPaymentHistory = async (santriId) => {
             notes: '',
             periodData: period,
             periodKey: periodKey,
+            creditApplied: 0,
+            remainingAmount: period.amount,
             createdAt: new Date(),
             updatedAt: new Date()
           };
@@ -119,6 +123,8 @@ export const getWaliPaymentHistory = async (santriId) => {
           notes: '',
           periodData: period,
           periodKey: periodKey,
+          creditApplied: 0,
+          remainingAmount: period.amount,
           createdAt: new Date(),
           updatedAt: new Date()
         };
@@ -238,6 +244,168 @@ export const getPaymentSummary = (payments) => {
     unpaidAmount,
     progressPercentage
   };
+};
+
+export const getCreditBalance = async (santriId) => {
+  try {
+    if (!db || !santriId) {
+      return { success: false, creditBalance: 0 };
+    }
+
+    const userDoc = await doc(db, 'users', santriId);
+    const userData = await getDoc(userDoc);
+    
+    if (userData.exists()) {
+      const data = userData.data();
+      return {
+        success: true,
+        creditBalance: data.creditBalance || 0
+      };
+    }
+    
+    return { success: true, creditBalance: 0 };
+  } catch (error) {
+    console.error('Error getting credit balance:', error);
+    return { success: false, creditBalance: 0, error: error.message };
+  }
+};
+
+export const updateCreditBalance = async (santriId, newBalance) => {
+  try {
+    if (!db || !santriId) {
+      throw new Error('Parameter tidak lengkap');
+    }
+
+    const userRef = doc(db, 'users', santriId);
+    await updateDoc(userRef, {
+      creditBalance: newBalance,
+      updatedAt: new Date()
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating credit balance:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const applyCreditToPayments = (payments, creditBalance) => {
+  let remainingCredit = creditBalance;
+  const updatedPayments = [...payments];
+
+  for (let i = 0; i < updatedPayments.length; i++) {
+    const payment = updatedPayments[i];
+    
+    if (payment.status === 'belum_bayar' && remainingCredit > 0) {
+      const creditToApply = Math.min(remainingCredit, payment.amount);
+      
+      updatedPayments[i] = {
+        ...payment,
+        creditApplied: creditToApply,
+        remainingAmount: payment.amount - creditToApply
+      };
+      
+      remainingCredit -= creditToApply;
+      
+      if (updatedPayments[i].remainingAmount === 0) {
+        updatedPayments[i].status = 'lunas';
+        updatedPayments[i].paymentDate = new Date();
+        updatedPayments[i].paymentMethod = 'credit';
+        updatedPayments[i].notes = 'Dibayar dengan saldo credit';
+      }
+    }
+  }
+
+  return {
+    payments: updatedPayments,
+    usedCredit: creditBalance - remainingCredit,
+    remainingCredit
+  };
+};
+
+export const processPaymentWithCredit = async (timelineId, periodKey, santriId, paymentAmount, paymentMethod) => {
+  try {
+    if (!db || !timelineId || !periodKey || !santriId || !paymentAmount) {
+      throw new Error('Parameter tidak lengkap');
+    }
+
+    const creditResult = await getCreditBalance(santriId);
+    if (!creditResult.success) {
+      throw new Error('Gagal mengambil saldo credit');
+    }
+
+    const currentCredit = creditResult.creditBalance;
+    const paymentHistory = await getWaliPaymentHistory(santriId);
+    
+    if (!paymentHistory.success) {
+      throw new Error('Gagal mengambil riwayat pembayaran');
+    }
+
+    const targetPayment = paymentHistory.payments.find(p => p.periodKey === periodKey);
+    if (!targetPayment) {
+      throw new Error('Pembayaran tidak ditemukan');
+    }
+
+    let newCreditBalance = currentCredit;
+    let creditApplied = 0;
+    let excessCredit = 0;
+    
+    // 1. Hitung berapa credit yang bisa dipakai untuk pembayaran ini
+    if (currentCredit > 0) {
+      creditApplied = Math.min(currentCredit, targetPayment.amount);
+      newCreditBalance = currentCredit - creditApplied;
+    }
+    
+    // 2. Hitung sisa yang harus dibayar setelah credit diterapkan
+    const remainingAfterCredit = targetPayment.amount - creditApplied;
+    
+    // 3. Cek apakah payment amount melebihi yang dibutuhkan
+    if (paymentAmount > remainingAfterCredit) {
+      // Ada excess payment yang akan jadi credit
+      excessCredit = paymentAmount - remainingAfterCredit;
+      
+      // Validate max credit (3x nominal periode)
+      const maxTotalCredit = targetPayment.amount * 3;
+      const finalExcessCredit = Math.min(excessCredit, maxTotalCredit - newCreditBalance);
+      
+      newCreditBalance += finalExcessCredit;
+    }
+    
+    // 4. Update status payment
+    const updateData = {
+      status: 'lunas',
+      paymentDate: toISOString(),
+      paymentMethod: paymentMethod,
+      creditApplied,
+      remainingAmount: 0,
+      paidAmount: remainingAfterCredit, // Amount actually paid (excluding credit)
+      totalPaid: paymentAmount, // Total amount user paid
+      notes: creditApplied > 0 ? `Credit applied: ${creditApplied}` : ''
+    };
+
+    const paymentResult = await updateWaliPaymentStatus(timelineId, periodKey, santriId, updateData);
+    if (!paymentResult.success) {
+      throw new Error('Gagal update status pembayaran');
+    }
+
+    const creditUpdateResult = await updateCreditBalance(santriId, newCreditBalance);
+    if (!creditUpdateResult.success) {
+      throw new Error('Gagal update saldo credit');
+    }
+
+    return {
+      success: true,
+      creditApplied,
+      newCreditBalance,
+      excessCredit,
+      paidAmount: remainingAfterCredit,
+      totalPaid: paymentAmount,
+      paymentStatus: 'lunas'
+    };
+  } catch (error) {
+    console.error('Error processing payment with credit:', error);
+    return { success: false, error: error.message };
+  }
 };
 
 export const clearWaliCache = () => {

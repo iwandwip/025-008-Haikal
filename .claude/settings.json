@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Write",
+      "Read",
+      "Bash(rg:*)"
+    ],
+    "deny": [
+      "Bash(curl:*)"
+    ]
+  }
+}

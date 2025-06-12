@@ -15,6 +15,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
+import { formatDate, toISOString } from "../../utils/dateUtils";
 import {
   getUserDetailedPayments,
   updateUserPaymentStatus,
@@ -120,7 +121,7 @@ function UserPaymentDetail() {
       };
 
       if (newStatus === "lunas") {
-        updateData.paymentDate = new Date().toISOString();
+        updateData.paymentDate = toISOString();
         updateData.paymentMethod = "tunai";
         updateData.notes = notes || "Pembayaran dikonfirmasi oleh admin";
       }
@@ -220,15 +221,6 @@ function UserPaymentDetail() {
     }).format(amount);
   }, []);
 
-  const formatDate = useCallback((dateString) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
 
   const renderSummaryCard = useMemo(() => {
     if (!summary) return null;

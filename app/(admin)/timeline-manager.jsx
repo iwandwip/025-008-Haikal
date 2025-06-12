@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -29,14 +30,15 @@ export default function TimelineManager() {
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [simulationDateTime, setSimulationDateTime] = useState(
     new Date().toISOString()
   );
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
 
     const [timelineResult, templatesResult] = await Promise.all([
       getActiveTimeline(),
@@ -56,7 +58,13 @@ export default function TimelineManager() {
       setTemplates(templatesResult.templates);
     }
 
-    setLoading(false);
+    if (!isRefresh) setLoading(false);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData(true);
+    setRefreshing(false);
   };
 
   useEffect(() => {
@@ -183,22 +191,64 @@ export default function TimelineManager() {
   const handleDeleteTimeline = () => {
     if (!activeTimeline) return;
 
+    // First alert to confirm deletion with payment data options
     Alert.alert(
       "Hapus Timeline",
-      `Apakah Anda yakin ingin menghapus timeline "${activeTimeline.name}"?\n\nTindakan ini akan menghapus:\n• Timeline aktif\n• Semua data pembayaran\n• Semua data terkait\n\nTindakan ini TIDAK DAPAT dibatalkan!`,
+      `Apakah Anda yakin ingin menghapus timeline "${activeTimeline.name}"?`,
       [
         { text: "Batal", style: "cancel" },
         {
-          text: "Ya, Hapus",
+          text: "Lanjutkan",
+          onPress: () => showPaymentDataOptions()
+        }
+      ]
+    );
+  };
+
+  const showPaymentDataOptions = () => {
+    Alert.alert(
+      "Opsi Data Pembayaran",
+      "Pilih tindakan untuk data pembayaran santri:",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Hapus Timeline Saja",
+          onPress: () => confirmDeleteTimeline(false)
+        },
+        {
+          text: "Hapus Timeline + Data Pembayaran",
+          style: "destructive", 
+          onPress: () => confirmDeleteTimeline(true)
+        }
+      ]
+    );
+  };
+
+  const confirmDeleteTimeline = (deletePaymentData) => {
+    const message = deletePaymentData 
+      ? `Timeline "${activeTimeline.name}" dan SEMUA data pembayaran santri akan dihapus.\n\n⚠️ PERINGATAN: Semua riwayat pembayaran santri akan hilang permanen!`
+      : `Timeline "${activeTimeline.name}" akan dihapus, tetapi data pembayaran santri akan dipertahankan untuk referensi.`;
+
+    Alert.alert(
+      "Konfirmasi Penghapusan",
+      message + "\n\nTindakan ini TIDAK DAPAT dibatalkan!",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: deletePaymentData ? "Hapus Semua" : "Hapus Timeline",
           style: "destructive",
           onPress: async () => {
             setDeleting(true);
-            const result = await deleteActiveTimeline();
+            const result = await deleteActiveTimeline(deletePaymentData);
 
             if (result.success) {
+              const successMessage = deletePaymentData
+                ? "Timeline dan semua data pembayaran berhasil dihapus!"
+                : "Timeline berhasil dihapus, data pembayaran santri dipertahankan.";
+              
               Alert.alert(
                 "Timeline Dihapus",
-                "Timeline dan semua data pembayaran berhasil dihapus!",
+                successMessage,
                 [
                   {
                     text: "OK",
@@ -391,7 +441,20 @@ export default function TimelineManager() {
         <Text style={styles.headerTitle}>Timeline Manager</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#3b82f6"]}
+            tintColor={"#3b82f6"}
+            title="Memuat ulang..."
+            titleColor={"#64748b"}
+          />
+        }
+      >
         <View style={styles.activeTimelineSection}>
           <Text style={styles.sectionTitle}>Timeline Aktif</Text>
 
