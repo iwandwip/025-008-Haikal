@@ -7,7 +7,7 @@
     "icon": "./assets/icon-money.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/splash.png",
+      "image": "./assets/icon-money.png",
       "resizeMode": "contain",
       "backgroundColor": "#F50057"
     },
@@ -21,7 +21,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-money.png",
         "backgroundColor": "#F50057"
-      }
+      },
+      "package": "com.haikal.haikalapp"
     },
     "web": {
       "favicon": "./assets/icon-money.png",
@@ -30,6 +31,12 @@
     "plugins": [
       "expo-router"
     ],
-    "scheme": "firebase-auth-template"
+    "scheme": "firebase-auth-template",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "878acea5-1787-4765-a329-78bb9b93b718"
+      }
+    }
   }
 }
