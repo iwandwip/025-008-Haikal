@@ -9,7 +9,6 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getActiveTimeline, calculatePaymentStatus } from './timelineService';
-import { getUserCreditBalance, getReducedAmounts, processPaymentWithCredit } from './creditService';
 
 let cachedPayments = new Map();
 let cachedTimeline = null;
@@ -34,17 +33,10 @@ export const getWaliPaymentHistory = async (santriId) => {
     const cacheKey = santriId;
 
     if (isCacheValid() && cachedTimeline && cachedPayments.has(cacheKey)) {
-      const cachedData = cachedPayments.get(cacheKey);
-      const creditResult = await getUserCreditBalance(santriId);
-      const creditBalance = creditResult.success ? creditResult.balance : 0;
-      
-      const paymentsWithCredit = getReducedAmounts(cachedData, creditBalance);
-      
       return {
         success: true,
-        payments: paymentsWithCredit,
-        timeline: cachedTimeline,
-        creditBalance
+        payments: cachedPayments.get(cacheKey),
+        timeline: cachedTimeline
       };
     }
 
@@ -91,8 +83,6 @@ export const getWaliPaymentHistory = async (santriId) => {
             paymentDate: null,
             paymentMethod: null,
             notes: '',
-            creditUsed: 0,
-            actualPayment: 0,
             periodData: period,
             periodKey: periodKey,
             createdAt: new Date(),
@@ -106,8 +96,6 @@ export const getWaliPaymentHistory = async (santriId) => {
           const payment = {
             id: querySnapshot.docs[0].id,
             ...paymentData,
-            creditUsed: paymentData.creditUsed || 0,
-            actualPayment: paymentData.actualPayment || paymentData.amount || period.amount,
             periodData: period,
             periodKey: periodKey
           };
@@ -129,8 +117,6 @@ export const getWaliPaymentHistory = async (santriId) => {
           paymentDate: null,
           paymentMethod: null,
           notes: '',
-          creditUsed: 0,
-          actualPayment: 0,
           periodData: period,
           periodKey: periodKey,
           createdAt: new Date(),
@@ -150,21 +136,11 @@ export const getWaliPaymentHistory = async (santriId) => {
       return periodA - periodB;
     });
 
-    const creditResult = await getUserCreditBalance(santriId);
-    const creditBalance = creditResult.success ? creditResult.balance : 0;
-    
-    const paymentsWithCredit = getReducedAmounts(allPayments, creditBalance);
-
     cachedPayments.set(cacheKey, allPayments);
     cachedTimeline = timeline;
     cacheTimestamp = Date.now();
 
-    return { 
-      success: true, 
-      payments: paymentsWithCredit, 
-      timeline,
-      creditBalance 
-    };
+    return { success: true, payments: allPayments, timeline };
   } catch (error) {
     console.error('Error getting wali payment history:', error);
     return { success: false, error: error.message, payments: [], timeline: null };
@@ -234,33 +210,6 @@ export const updateWaliPaymentStatus = async (timelineId, periodKey, santriId, u
     return { success: true };
   } catch (error) {
     console.error('Error updating wali payment status:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-export const processCustomPayment = async (santriId, timelineId, paymentAmount, paymentMethod, allPayments) => {
-  try {
-    if (!db) {
-      throw new Error('Firestore belum diinisialisasi');
-    }
-
-    const result = await processPaymentWithCredit(santriId, timelineId, paymentAmount, allPayments);
-    
-    if (result.success) {
-      cachedPayments.delete(santriId);
-      cacheTimestamp = null;
-      
-      return {
-        success: true,
-        allocation: result.allocation,
-        summary: result.summary,
-        paymentId: result.paymentId
-      };
-    }
-
-    return result;
-  } catch (error) {
-    console.error('Error processing custom payment:', error);
     return { success: false, error: error.message };
   }
 };

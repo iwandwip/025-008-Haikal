@@ -23,7 +23,6 @@ import {
   getWaliPaymentHistory,
   getPaymentSummary,
   updateWaliPaymentStatus,
-  processCustomPayment,
 } from "../../services/waliPaymentService";
 
 function StatusPembayaran() {
@@ -37,7 +36,6 @@ function StatusPembayaran() {
   const [timeline, setTimeline] = useState(null);
   const [payments, setPayments] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [creditBalance, setCreditBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
@@ -50,7 +48,6 @@ function StatusPembayaran() {
           setPayments([]);
           setSummary(null);
           setTimeline(null);
-          setCreditBalance(0);
           setLoading(false);
           return;
         }
@@ -66,20 +63,17 @@ function StatusPembayaran() {
         if (result.success && result.data) {
           setPayments(result.data.payments || []);
           setTimeline(result.data.timeline);
-          setCreditBalance(result.data.creditBalance || 0);
           setSummary(getPaymentSummary(result.data.payments || []));
         } else {
           const fallbackResult = await getWaliPaymentHistory(userProfile.id);
           if (fallbackResult.success) {
             setPayments(fallbackResult.payments);
             setTimeline(fallbackResult.timeline);
-            setCreditBalance(fallbackResult.creditBalance || 0);
             setSummary(getPaymentSummary(fallbackResult.payments));
           } else {
             setPayments([]);
             setSummary(null);
             setTimeline(null);
-            setCreditBalance(0);
           }
         }
       } catch (error) {
@@ -87,7 +81,6 @@ function StatusPembayaran() {
         setPayments([]);
         setSummary(null);
         setTimeline(null);
-        setCreditBalance(0);
       } finally {
         setLoading(false);
       }
@@ -134,7 +127,6 @@ function StatusPembayaran() {
         if (data.data.success) {
           setPayments(data.data.payments || []);
           setTimeline(data.data.timeline);
-          setCreditBalance(data.data.creditBalance || 0);
           setSummary(getPaymentSummary(data.data.payments || []));
         }
       }
@@ -149,64 +141,31 @@ function StatusPembayaran() {
   }, []);
 
   const handlePaymentSuccess = useCallback(
-    async (
-      payment,
-      paymentMethod,
-      customAmount = null,
-      paymentAllocation = null
-    ) => {
+    async (payment, paymentMethod) => {
       setUpdatingPayment(true);
 
       try {
-        if (customAmount && paymentAllocation) {
-          const result = await processCustomPayment(
-            userProfile.id,
-            timeline.id,
-            customAmount,
-            paymentMethod,
-            payments
-          );
-
-          if (result.success) {
-            await loadData(true, false);
-            showPaymentSuccessNotification(payment);
-            paymentStatusManager.clearUserCache(userProfile.id);
-          } else {
-            showErrorNotification(
-              "Gagal memperbarui status pembayaran: " + result.error
-            );
+        const result = await updateWaliPaymentStatus(
+          timeline.id,
+          payment.periodKey,
+          userProfile.id,
+          {
+            status: "lunas",
+            paymentDate: new Date().toISOString(),
+            paymentMethod: paymentMethod,
+            notes: `Pembayaran melalui ${paymentMethod}`,
           }
+        );
+
+        if (result.success) {
+          await loadData(true, false);
+          showPaymentSuccessNotification(payment);
+
+          paymentStatusManager.clearUserCache(userProfile.id);
         } else {
-          const effectiveAmount = Math.max(
-            0,
-            payment.amount - (payment.creditApplied || 0)
+          showErrorNotification(
+            "Gagal memperbarui status pembayaran: " + result.error
           );
-          const creditUsed = Math.min(creditBalance, payment.amount);
-
-          const result = await updateWaliPaymentStatus(
-            timeline.id,
-            payment.periodKey,
-            userProfile.id,
-            {
-              status: "lunas",
-              paymentDate: new Date().toISOString(),
-              paymentMethod: paymentMethod,
-              creditUsed: creditUsed,
-              actualPayment: effectiveAmount,
-              totalAmount: payment.amount,
-              notes: `Pembayaran melalui ${paymentMethod}`,
-            }
-          );
-
-          if (result.success) {
-            await loadData(true, false);
-            showPaymentSuccessNotification(payment);
-            paymentStatusManager.clearUserCache(userProfile.id);
-          } else {
-            showErrorNotification(
-              "Gagal memperbarui status pembayaran: " + result.error
-            );
-          }
         }
       } catch (error) {
         showErrorNotification("Terjadi kesalahan saat memperbarui pembayaran");
@@ -218,8 +177,6 @@ function StatusPembayaran() {
     [
       timeline?.id,
       userProfile?.id,
-      payments,
-      creditBalance,
       loadData,
       showPaymentSuccessNotification,
       showErrorNotification,
@@ -299,22 +256,6 @@ function StatusPembayaran() {
         <Text style={[styles.summaryTitle, { color: colors.gray900 }]}>
           Ringkasan Pembayaran
         </Text>
-
-        {creditBalance > 0 && (
-          <View
-            style={[
-              styles.creditSection,
-              { backgroundColor: colors.primary + "10" },
-            ]}
-          >
-            <Text style={[styles.creditLabel, { color: colors.primary }]}>
-              💰 Saldo Credit Anda
-            </Text>
-            <Text style={[styles.creditAmount, { color: colors.primary }]}>
-              {formatCurrency(creditBalance)}
-            </Text>
-          </View>
-        )}
 
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
@@ -406,7 +347,7 @@ function StatusPembayaran() {
         </View>
       </View>
     );
-  }, [summary, creditBalance, colors, formatCurrency]);
+  }, [summary, colors, formatCurrency]);
 
   const renderPaymentItem = useCallback(
     ({ item }) => (
@@ -454,29 +395,6 @@ function StatusPembayaran() {
             </Text>
           </View>
 
-          {item.creditApplied > 0 && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.labelText, { color: colors.gray600 }]}>
-                Credit tersedia:
-              </Text>
-              <Text style={[styles.valueText, { color: colors.success }]}>
-                {formatCurrency(item.creditApplied)}
-              </Text>
-            </View>
-          )}
-
-          {item.effectiveAmount !== undefined &&
-            item.effectiveAmount !== item.amount && (
-              <View style={styles.infoRow}>
-                <Text style={[styles.labelText, { color: colors.gray600 }]}>
-                  Yang harus dibayar:
-                </Text>
-                <Text style={[styles.valueText, { color: colors.primary }]}>
-                  {formatCurrency(item.effectiveAmount)}
-                </Text>
-              </View>
-            )}
-
           {item.paymentDate && (
             <View style={styles.infoRow}>
               <Text style={[styles.labelText, { color: colors.gray600 }]}>
@@ -495,17 +413,6 @@ function StatusPembayaran() {
               </Text>
               <Text style={[styles.valueText, { color: colors.gray900 }]}>
                 {item.paymentMethod === "tunai" ? "Tunai" : "Online"}
-              </Text>
-            </View>
-          )}
-
-          {item.creditUsed > 0 && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.labelText, { color: colors.gray600 }]}>
-                Credit digunakan:
-              </Text>
-              <Text style={[styles.valueText, { color: colors.success }]}>
-                {formatCurrency(item.creditUsed)}
               </Text>
             </View>
           )}
@@ -668,8 +575,8 @@ function StatusPembayaran() {
           windowSize={10}
           removeClippedSubviews={true}
           getItemLayout={(data, index) => ({
-            length: index === 0 ? 280 : 200,
-            offset: index === 0 ? 0 : 280 + (index - 1) * 200,
+            length: index === 0 ? 250 : 180,
+            offset: index === 0 ? 0 : 250 + (index - 1) * 180,
             index,
           })}
         />
@@ -692,7 +599,6 @@ function StatusPembayaran() {
       <PaymentModal
         visible={paymentModalVisible}
         payment={selectedPayment}
-        allPayments={payments}
         onClose={() => setPaymentModalVisible(false)}
         onPaymentSuccess={handlePaymentSuccess}
       />
@@ -771,21 +677,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 20,
-  },
-  creditSection: {
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  creditLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 4,
-  },
-  creditAmount: {
-    fontSize: 20,
-    fontWeight: "bold",
   },
   progressContainer: {
     marginBottom: 20,
