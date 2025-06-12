@@ -6,6 +6,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { updateSantriRFID } from './userService';
 
 const PAIRING_COLLECTION = 'rfid_pairing';
 const PAIRING_DOC_ID = 'current_session';
@@ -19,9 +20,11 @@ export const startPairing = async (santriId) => {
     const pairingData = {
       isActive: true,
       santriId: santriId,
-      startTime: new Date(),
-      rfidCode: null,
-      status: 'waiting'
+      startTime: new Date().toISOString(),
+      rfidCode: '',
+      status: 'waiting',
+      cancelledTime: '',
+      receivedTime: ''
     };
 
     await setDoc(doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID), pairingData);
@@ -29,7 +32,7 @@ export const startPairing = async (santriId) => {
     setTimeout(async () => {
       try {
         const currentDoc = await getDoc(doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID));
-        if (currentDoc.exists() && currentDoc.data().santriId === santriId) {
+        if (currentDoc.exists() && currentDoc.data().santriId === santriId && currentDoc.data().isActive) {
           await cancelPairing();
         }
       } catch (error) {
@@ -51,16 +54,16 @@ export const cancelPairing = async () => {
     }
 
     const docRef = doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID);
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
-      await updateDoc(docRef, {
-        isActive: false,
-        status: 'cancelled',
-        cancelledTime: new Date(),
-        rfidCode: null
-      });
-    }
+    
+    await setDoc(docRef, {
+      isActive: false,
+      santriId: '',
+      startTime: '',
+      rfidCode: '',
+      status: '',
+      cancelledTime: '',
+      receivedTime: ''
+    });
 
     return { success: true };
   } catch (error) {
@@ -100,11 +103,22 @@ export const listenToPairingData = (callback) => {
   try {
     const docRef = doc(db, PAIRING_COLLECTION, PAIRING_DOC_ID);
     
-    const unsubscribe = onSnapshot(docRef, (doc) => {
+    const unsubscribe = onSnapshot(docRef, async (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        if (data.rfidCode && data.status === 'received' && data.isActive) {
-          callback(data.rfidCode);
+        if (data.rfidCode && data.rfidCode !== '' && data.santriId && data.santriId !== '') {
+          try {
+            const result = await updateSantriRFID(data.santriId, data.rfidCode);
+            if (result.success) {
+              await cancelPairing();
+              callback({ success: true, rfidCode: data.rfidCode, santriId: data.santriId });
+            } else {
+              callback({ success: false, error: result.error });
+            }
+          } catch (error) {
+            console.error('Error saving RFID to santri:', error);
+            callback({ success: false, error: error.message });
+          }
         }
       }
     });
