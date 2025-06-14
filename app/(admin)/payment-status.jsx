@@ -16,7 +16,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useNotification } from "../../contexts/NotificationContext";
-import { getColors } from "../../constants/Colors";
+import { getThemeByRole } from "../../constants/Colors";
+import { useAuth } from "../../contexts/AuthContext";
 import { formatDate } from "../../utils/dateUtils";
 import { paymentStatusManager } from "../../services/paymentStatusManager";
 import { getAllUsersPaymentStatus } from "../../services/adminPaymentService";
@@ -24,7 +25,8 @@ import { getAllUsersPaymentStatus } from "../../services/adminPaymentService";
 function PaymentStatus() {
   const { theme, loading: settingsLoading } = useSettings();
   const { showUpdateNotification, showErrorNotification } = useNotification();
-  const colors = getColors(theme);
+  const { userProfile } = useAuth();
+  const colors = getThemeByRole(true); // Admin theme
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [users, setUsers] = useState([]);

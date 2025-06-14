@@ -12,6 +12,8 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LoadingSpinner from "../../components/ui/LoadingSpinner";
 import { getAllSantri } from "../../services/userService";
+import { getThemeByRole } from "../../constants/Colors";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function DaftarSantri() {
   const [santriList, setSantriList] = useState([]);
@@ -19,6 +21,8 @@ export default function DaftarSantri() {
   const [refreshing, setRefreshing] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userProfile } = useAuth();
+  const colors = getThemeByRole(true); // Admin theme
 
   const loadSantri = async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
@@ -58,7 +62,7 @@ export default function DaftarSantri() {
 
   const renderSantriItem = ({ item }) => (
     <TouchableOpacity
-      style={styles.santriCard}
+      style={[styles.santriCard, { borderColor: colors.border }]}
       onPress={() => handleSantriPress(item)}
       activeOpacity={0.8}
     >
@@ -71,9 +75,9 @@ export default function DaftarSantri() {
 
       <View style={styles.rfidSection}>
         {item.rfidSantri ? (
-          <View style={styles.rfidActive}>
-            <Text style={styles.rfidLabel}>RFID</Text>
-            <Text style={styles.rfidValue}>✓ Terpasang</Text>
+          <View style={[styles.rfidActive, { backgroundColor: colors.accent }]}>
+            <Text style={[styles.rfidLabel, { color: colors.primaryDark }]}>RFID</Text>
+            <Text style={[styles.rfidValue, { color: colors.primary }]}>✓ Terpasang</Text>
           </View>
         ) : (
           <View style={styles.rfidInactive}>
@@ -94,7 +98,7 @@ export default function DaftarSantri() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>← Kembali</Text>
+            <Text style={[styles.backButtonText, { color: colors.primary }]}>← Kembali</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Daftar Santri</Text>
         </View>
@@ -118,7 +122,7 @@ export default function DaftarSantri() {
       </View>
 
       <View style={styles.content}>
-        <View style={styles.statsSection}>
+        <View style={[styles.statsSection, { borderColor: colors.accent, backgroundColor: colors.white }]}>
           <Text style={styles.statsText}>
             Total Santri: {santriList.length}
           </Text>
@@ -149,8 +153,8 @@ export default function DaftarSantri() {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={onRefresh}
-                colors={["#3b82f6"]}
-                tintColor="#3b82f6"
+                colors={[colors.primary]}
+                tintColor={colors.primary}
               />
             }
           />
@@ -178,7 +182,6 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    color: "#3b82f6",
     fontWeight: "500",
   },
   headerTitle: {
@@ -199,11 +202,9 @@ const styles = StyleSheet.create({
   },
   statsSection: {
     marginBottom: 20,
-    backgroundColor: "#fff",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
   },
   statsText: {
     fontSize: 16,
@@ -224,7 +225,6 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#e2e8f0",
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
@@ -265,7 +265,6 @@ const styles = StyleSheet.create({
   },
   rfidActive: {
     alignItems: "center",
-    backgroundColor: "#dcfce7",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -280,12 +279,10 @@ const styles = StyleSheet.create({
   rfidLabel: {
     fontSize: 10,
     fontWeight: "500",
-    color: "#374151",
   },
   rfidValue: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#374151",
   },
   arrowText: {
     fontSize: 16,

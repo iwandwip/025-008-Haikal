@@ -15,6 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Input from "../../components/ui/Input";
 import Button from "../../components/ui/Button";
 import { signUpWithEmail } from "../../services/authService";
+import { getThemeByRole } from "../../constants/Colors";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function TambahSantri() {
   const [formData, setFormData] = useState({
@@ -27,6 +29,8 @@ export default function TambahSantri() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userProfile } = useAuth();
+  const colors = getThemeByRole(true); // Admin theme
 
   const updateForm = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -115,7 +119,7 @@ export default function TambahSantri() {
             style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>← Kembali</Text>
+            <Text style={[styles.backButtonText, { color: colors.primary }]}>← Kembali</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Tambah Data Santri</Text>
         </View>
@@ -130,7 +134,7 @@ export default function TambahSantri() {
         >
           <View style={styles.content}>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Data Santri</Text>
+              <Text style={[styles.sectionTitle, { borderBottomColor: colors.primary }]}>Data Santri</Text>
 
               <Input
                 label="Nama Santri"
@@ -140,8 +144,8 @@ export default function TambahSantri() {
                 autoCapitalize="words"
               />
 
-              <View style={styles.infoBox}>
-                <Text style={styles.infoText}>
+              <View style={[styles.infoBox, { backgroundColor: colors.accent }]}>
+                <Text style={[styles.infoText, { color: colors.primaryDark }]}>
                   ℹ️ RFID santri akan diatur setelah data tersimpan melalui menu
                   Daftar Santri
                 </Text>
@@ -149,7 +153,7 @@ export default function TambahSantri() {
             </View>
 
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Data Wali Santri</Text>
+              <Text style={[styles.sectionTitle, { borderBottomColor: colors.primary }]}>Data Wali Santri</Text>
 
               <Input
                 label="Nama Wali"
@@ -219,7 +223,6 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     fontSize: 16,
-    color: "#3b82f6",
     fontWeight: "500",
   },
   headerTitle: {
@@ -248,17 +251,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingBottom: 8,
     borderBottomWidth: 2,
-    borderBottomColor: "#3b82f6",
   },
   infoBox: {
-    backgroundColor: "#dbeafe",
     padding: 12,
     borderRadius: 8,
     marginTop: 8,
   },
   infoText: {
     fontSize: 14,
-    color: "#1e40af",
     lineHeight: 20,
   },
   simpanButton: {

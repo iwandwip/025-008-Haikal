@@ -16,7 +16,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSettings } from "../../contexts/SettingsContext";
 import { useNotification } from "../../contexts/NotificationContext";
-import { getColors } from "../../constants/Colors";
+import { getColors, getThemeByRole } from "../../constants/Colors";
 import PaymentModal from "../../components/ui/PaymentModal";
 import CreditBalance from "../../components/ui/CreditBalance";
 import { formatDate } from "../../utils/dateUtils";
@@ -30,7 +30,7 @@ import {
 } from "../../services/waliPaymentService";
 
 function StatusPembayaran() {
-  const { userProfile } = useAuth();
+  const { userProfile, isAdmin } = useAuth();
   const { theme, loading: settingsLoading } = useSettings();
   const { 
     showPaymentSuccessNotification, 
@@ -38,7 +38,7 @@ function StatusPembayaran() {
     showPaymentWithCreditNotification,
     showCreditBalanceNotification
   } = useNotification();
-  const colors = getColors(theme);
+  const colors = getThemeByRole(isAdmin);
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState(null);

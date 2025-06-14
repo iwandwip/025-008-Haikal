@@ -16,15 +16,17 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNotification } from "../../contexts/NotificationContext";
+import { getThemeByRole } from "../../constants/Colors";
 import Button from "../../components/ui/Button";
 import { signOutUser } from "../../services/authService";
 import { seederService } from "../../services/seederService";
 
 function AdminHome() {
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser, userProfile, isAdmin } = useAuth();
   const { showGeneralNotification } = useNotification();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const colors = getThemeByRole(true); // Admin theme
   const [loggingOut, setLoggingOut] = useState(false);
   const [seederLoading, setSeederLoading] = useState(false);
   const [seederModalVisible, setSeederModalVisible] = useState(false);
@@ -200,7 +202,7 @@ function AdminHome() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+    <SafeAreaView style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.gray50 }]}>
       <ScrollView
         style={styles.content}
         contentContainerStyle={[
@@ -212,18 +214,18 @@ function AdminHome() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={["#3b82f6"]}
-            tintColor="#3b82f6"
+            colors={[colors.primary]}
+            tintColor={colors.primary}
             title="Tarik untuk memuat ulang..."
-            titleColor="#64748b"
+            titleColor={colors.gray600}
           />
         }
       >
         <View style={styles.headerSection}>
-          <Text style={styles.title}>Dashboard Admin</Text>
-          <Text style={styles.subtitle}>TPQ Ibadurrohman</Text>
+          <Text style={[styles.title, { color: colors.gray900 }]}>Dashboard Admin</Text>
+          <Text style={[styles.subtitle, { color: colors.gray600 }]}>TPQ Ibadurrohman</Text>
           {userProfile && (
-            <Text style={styles.welcomeText}>
+            <Text style={[styles.welcomeText, { color: colors.primary }]}>
               Selamat datang, {userProfile.nama}
             </Text>
           )}
@@ -231,78 +233,96 @@ function AdminHome() {
 
         <View style={styles.menuSection}>
           <TouchableOpacity
-            style={[styles.menuCard, styles.primaryCard]}
+            style={[styles.menuCard, { borderColor: colors.primary }]}
             onPress={handleTambahSantri}
             activeOpacity={0.8}
           >
-            <View style={styles.menuIcon}>
+            <View style={[styles.menuIcon, { backgroundColor: colors.accent }]}>
               <Text style={styles.menuIconText}>👤</Text>
             </View>
             <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>Tambah Data Santri</Text>
-              <Text style={styles.menuDesc}>
+              <Text style={[styles.menuTitle, { color: colors.gray900 }]}>Tambah Data Santri</Text>
+              <Text style={[styles.menuDesc, { color: colors.gray600 }]}>
                 Daftarkan santri baru dan buat akun wali santri
               </Text>
             </View>
             <View style={styles.menuArrow}>
-              <Text style={styles.arrowText}>→</Text>
+              <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.menuCard, styles.secondaryCard]}
+            style={[
+              styles.menuCard, 
+              { 
+                borderColor: colors.primaryLight,
+                backgroundColor: colors.white 
+              }
+            ]}
             onPress={handleDaftarSantri}
             activeOpacity={0.8}
           >
-            <View style={styles.menuIcon}>
+            <View style={[styles.menuIcon, { backgroundColor: colors.accent }]}>
               <Text style={styles.menuIconText}>📋</Text>
             </View>
             <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>Daftar Santri</Text>
-              <Text style={styles.menuDesc}>
+              <Text style={[styles.menuTitle, { color: colors.gray900 }]}>Daftar Santri</Text>
+              <Text style={[styles.menuDesc, { color: colors.gray600 }]}>
                 Lihat dan kelola data santri yang terdaftar
               </Text>
             </View>
             <View style={styles.menuArrow}>
-              <Text style={styles.arrowText}>→</Text>
+              <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.menuCard, styles.tertiaryCard]}
+            style={[
+              styles.menuCard, 
+              { 
+                borderColor: colors.secondary,
+                backgroundColor: colors.white 
+              }
+            ]}
             onPress={handleTimelineManager}
             activeOpacity={0.8}
           >
-            <View style={styles.menuIcon}>
+            <View style={[styles.menuIcon, { backgroundColor: colors.accent }]}>
               <Text style={styles.menuIconText}>📅</Text>
             </View>
             <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>Timeline Manager</Text>
-              <Text style={styles.menuDesc}>
+              <Text style={[styles.menuTitle, { color: colors.gray900 }]}>Timeline Manager</Text>
+              <Text style={[styles.menuDesc, { color: colors.gray600 }]}>
                 Kelola timeline dan pembayaran bisyaroh
               </Text>
             </View>
             <View style={styles.menuArrow}>
-              <Text style={styles.arrowText}>→</Text>
+              <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.menuCard, styles.quaternaryCard]}
+            style={[
+              styles.menuCard, 
+              { 
+                borderColor: colors.primaryDark,
+                backgroundColor: colors.white 
+              }
+            ]}
             onPress={handleCekPembayaran}
             activeOpacity={0.8}
           >
-            <View style={styles.menuIcon}>
+            <View style={[styles.menuIcon, { backgroundColor: colors.accent }]}>
               <Text style={styles.menuIconText}>💰</Text>
             </View>
             <View style={styles.menuContent}>
-              <Text style={styles.menuTitle}>Cek Status Pembayaran</Text>
-              <Text style={styles.menuDesc}>
+              <Text style={[styles.menuTitle, { color: colors.gray900 }]}>Cek Status Pembayaran</Text>
+              <Text style={[styles.menuDesc, { color: colors.gray600 }]}>
                 Lihat status pembayaran bisyaroh semua santri
               </Text>
             </View>
             <View style={styles.menuArrow}>
-              <Text style={styles.arrowText}>→</Text>
+              <Text style={[styles.arrowText, { color: colors.gray400 }]}>→</Text>
             </View>
           </TouchableOpacity>
 
@@ -316,9 +336,9 @@ function AdminHome() {
             activeOpacity={0.8}
             disabled={seederLoading}
           >
-            <View style={styles.menuIcon}>
+            <View style={[styles.menuIcon, { backgroundColor: colors.accent }]}>
               {seederLoading ? (
-                <ActivityIndicator size={24} color="#ef4444" />
+                <ActivityIndicator size={24} color={colors.error} />
               ) : (
                 <Text style={styles.menuIconText}>🎲</Text>
               )}
@@ -333,11 +353,11 @@ function AdminHome() {
                   : "Buat akun santri dengan email sequential untuk testing"}
               </Text>
               <View style={styles.seederStats}>
-                <Text style={styles.seederStatsText}>
+                <Text style={[styles.seederStatsText, { color: colors.error }]}>
                   Total Santri: {seederStats.total} | Generated:{" "}
                   {seederStats.seederUsers}
                 </Text>
-                <Text style={styles.seederNextText}>
+                <Text style={[styles.seederNextText, { color: colors.success }]}>
                   Next: user{seederStats.nextUserNumber}@gmail.com
                 </Text>
               </View>
@@ -358,7 +378,7 @@ function AdminHome() {
             onPress={handleLogout}
             variant="outline"
             disabled={loggingOut}
-            style={styles.logoutButton}
+            style={[styles.logoutButton, { borderColor: colors.error }]}
           />
         </View>
       </ScrollView>
@@ -436,7 +456,7 @@ function AdminHome() {
       {seederLoading && (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingModal}>
-            <ActivityIndicator size="large" color="#ef4444" />
+            <ActivityIndicator size="large" color={colors.primary} />
             <Text style={styles.loadingTitle}>Generating Data Santri</Text>
             <Text style={styles.loadingSubtitle}>
               Membuat {seederCount} akun dengan email sequential...
@@ -480,7 +500,6 @@ const styles = StyleSheet.create({
   },
   welcomeText: {
     fontSize: 14,
-    color: "#3b82f6",
     fontWeight: "500",
   },
   menuSection: {
@@ -500,18 +519,6 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 2,
   },
-  primaryCard: {
-    borderColor: "#3b82f6",
-  },
-  secondaryCard: {
-    borderColor: "#10b981",
-  },
-  tertiaryCard: {
-    borderColor: "#f59e0b",
-  },
-  quaternaryCard: {
-    borderColor: "#8b5cf6",
-  },
   seederCard: {
     borderColor: "#ef4444",
     backgroundColor: "#fef2f2",
@@ -525,7 +532,6 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: "#f1f5f9",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 16,
@@ -553,12 +559,10 @@ const styles = StyleSheet.create({
   },
   seederStatsText: {
     fontSize: 12,
-    color: "#ef4444",
     fontWeight: "500",
   },
   seederNextText: {
     fontSize: 11,
-    color: "#059669",
     fontWeight: "600",
     marginTop: 2,
   },
@@ -574,7 +578,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logoutButton: {
-    borderColor: "#ef4444",
+    // borderColor will be set dynamically
   },
   modalOverlay: {
     flex: 1,
