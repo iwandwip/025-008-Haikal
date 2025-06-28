@@ -1,12 +1,34 @@
 import React from "react";
-import { Text, ActivityIndicator, View } from "react-native";
-import { Tabs } from "expo-router";
+import { Text, ActivityIndicator, View, Alert } from "react-native";
+import { Tabs, useRouter } from "expo-router";
 import { useSettings } from "../../contexts/SettingsContext";
-import { getColors } from "../../constants/Colors";
+import { getColors, getThemeByRole } from "../../constants/Colors";
+import { useAuth } from "../../contexts/AuthContext";
+import { signOutUser } from "../../services/authService";
 
 export default function TabsLayout() {
   const { theme, loading } = useSettings();
-  const colors = getColors(theme);
+  const { isAdmin } = useAuth();
+  const colors = getThemeByRole(isAdmin);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    Alert.alert("Konfirmasi Logout", "Apakah Anda yakin ingin keluar?", [
+      { text: "Batal", style: "cancel" },
+      {
+        text: "Keluar",
+        style: "destructive",
+        onPress: async () => {
+          const result = await signOutUser();
+          if (result.success) {
+            router.replace("/role-selection");
+          } else {
+            Alert.alert("Gagal Logout", "Gagal keluar. Silakan coba lagi.");
+          }
+        },
+      },
+    ]);
+  };
 
   if (loading) {
     return (
@@ -51,6 +73,21 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Text style={{ color, fontSize: size }}>👤</Text>
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="logout"
+        options={{
+          title: "Keluar",
+          tabBarIcon: ({ color, size }) => (
+            <Text style={{ color, fontSize: size }}>🚪</Text>
+          ),
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            handleLogout();
+          },
         }}
       />
       <Tabs.Screen
