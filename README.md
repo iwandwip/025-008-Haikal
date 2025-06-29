@@ -1,18 +1,42 @@
-# Firebase Auth Template with Data Table
+# Smart Bisyaroh - TPQ Payment Management System
 
-A clean and modern React Native template with Firebase authentication, data table management, multi-language support, and theme switching.
+A comprehensive IoT-enabled payment management system for TPQ (Taman Pendidikan Quran) Ibadurrohman, combining React Native mobile app with ESP32 hardware for automated RFID-based payments and intelligent currency recognition.
 
 ## Features
 
-- 🔐 **Firebase Authentication** - Complete auth flow with login, register, and password reset
-- 👤 **User Profiles** - User profile management with personal information
-- 👨‍💼 **Admin Panel** - Built-in admin functionality with admin@gmail.com
-- 📊 **Data Table** - Interactive table with sample data generation
-- 🌍 **Multi-language** - English and Indonesian language support
-- 🌙 **Dark/Light Theme** - Theme switching with persistent storage
-- 📱 **Modern UI** - Clean and responsive interface with illustrations
-- 🏗️ **Expo Router** - File-based routing system
-- 💾 **Firestore Integration** - Cloud database for user data
+### 🏫 Educational Institution Management
+- **Multi-role authentication** - Admin and Parent (Wali) access with role-based permissions
+- **Student management** - Complete student registration and profile management
+- **Timeline-based payments** - Flexible payment schedules (daily, weekly, monthly, yearly)
+- **Real-time payment tracking** - Live status updates and payment history
+
+### 🏷️ RFID Integration
+- **Student identification** - RFID card-based student recognition
+- **Real-time pairing** - Live RFID card assignment to students
+- **Hardware communication** - ESP32 integration via Firebase Realtime Database
+
+### 🧠 Machine Learning
+- **Currency recognition** - KNN algorithm for automatic bill detection
+- **Color sensor integration** - TCS3200 sensor for identifying IDR denominations
+- **Training data** - Pre-trained model for 2000, 5000, and 10000 IDR bills
+
+### 💰 Payment Processing
+- **Automated calculations** - Smart payment distribution across periods
+- **Credit management** - Overpayment handling and credit balance tracking
+- **Holiday management** - Exclude specific periods from payment schedules
+- **Status automation** - Automatic late payment detection and status updates
+
+### 🔧 Hardware Features
+- **ESP32 firmware** - Complete IoT device management
+- **LCD interface** - 16x2 display with button navigation
+- **Multi-sensor support** - RFID, color sensor, LEDs, buzzer, servo, relay
+- **WiFi connectivity** - Real-time synchronization with Firebase
+
+### 📱 Mobile Application  
+- **Cross-platform** - React Native with Expo for iOS, Android, and Web
+- **Modern UI** - Clean Indonesian-language interface
+- **Real-time updates** - Live payment status and notifications
+- **Offline support** - Local data caching and sync
 
 ## Quick Start
 
