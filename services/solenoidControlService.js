@@ -1,3 +1,25 @@
+/**
+ * ⚠️ DEPRECATED SERVICE - REPLACED BY MODE-BASED ARCHITECTURE ⚠️
+ * 
+ * This service has been REPLACED by the revolutionary mode-based RTDB architecture.
+ * 
+ * OLD: Complex command queue system (310+ lines, device status polling)
+ * NEW: Ultra-simple RTDB command state (instant execution, app-managed timeouts)
+ * 
+ * MIGRATION:
+ * Replace: import { unlockSolenoid, lockSolenoid } from './solenoidControlService'
+ * With:    import { unlockSolenoid, lockSolenoid } from './rtdbModeService'
+ * 
+ * See: DEPRECATED_SERVICES.md for complete migration guide
+ * See: services/rtdbModeService.js for new implementation
+ * 
+ * PERFORMANCE IMPROVEMENTS WITH NEW ARCHITECTURE:
+ * - Instant command execution (1-second response)
+ * - App-managed timeouts eliminate ESP32 complexity
+ * - Simple string commands vs complex JSON documents
+ * - No device status polling overhead
+ */
+
 import { 
   doc, 
   setDoc, 

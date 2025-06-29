@@ -14,12 +14,16 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
 import Button from "./Button";
 import { 
-  createHardwarePaymentSession, 
-  listenToHardwarePaymentSession,
-  cancelHardwarePaymentSession 
-} from "../../services/hardwarePaymentService";
+  startHardwarePaymentWithTimeout,
+  subscribeToPaymentProgress,
+  subscribeToPaymentResults,
+  completePaymentSession,
+  clearModeTimeout,
+  getMode,
+  clearPaymentStatus
+} from "../../services/rtdbModeService";
 
-const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalance = 0 }) => {
+const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalance = 0, userProfile = null }) => {
   const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
   const [selectedMethod, setSelectedMethod] = useState(null);
@@ -28,8 +32,9 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
   const [customAmount, setCustomAmount] = useState('');
   const [hardwarePayment, setHardwarePayment] = useState(false);
   const [hardwareStatus, setHardwareStatus] = useState('waiting'); // waiting, scanning, processing, success, error
-  const [hardwareSessionId, setHardwareSessionId] = useState(null);
-  const [hardwareListener, setHardwareListener] = useState(null);
+  const [paymentTimeoutId, setPaymentTimeoutId] = useState(null);
+  const [paymentProgressListener, setPaymentProgressListener] = useState(null);
+  const [paymentResultsListener, setPaymentResultsListener] = useState(null);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("id-ID", {
@@ -198,8 +203,8 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
     setHardwareStatus('waiting');
     
     Alert.alert(
-      "Bayar dari Alat Bisyaroh 🤖",
-      "Silakan pergi ke alat pembayaran Bisyaroh dan:\n\n1. Tap kartu RFID Anda\n2. Masukkan uang sesuai nominal\n3. Tunggu konfirmasi pembayaran\n\nSesi ini akan aktif selama 5 menit.",
+      "🔥 Mode-based Hardware Payment",
+      "Revolutionary RTDB mode akan mengatur ESP32 untuk pembayaran:\n\n🚀 ESP32 akan switch ke payment mode\n⚡ Real-time RFID detection aktif\n💰 Currency recognition siap\n\nSesi timeout: 5 menit (app-managed)",
       [
         {
           text: "Batal",
@@ -210,109 +215,215 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
           }
         },
         {
-          text: "Mulai",
+          text: "Mulai Mode Payment",
           onPress: async () => {
-            await startHardwarePaymentSession();
+            await startModeBasedPaymentSession();
           }
         }
       ]
     );
   };
 
-  const startHardwarePaymentSession = async () => {
+  const startModeBasedPaymentSession = async () => {
     try {
       setHardwareStatus('scanning');
       
-      // Create hardware payment session in Firebase
-      const sessionResult = await createHardwarePaymentSession(
-        payment.santriId,
-        payment.timelineId || 'default',
-        payment.periodKey,
-        amountAfterCredit
+      // Revolutionary mode-based payment with RFID code (not user_id!)
+      const rfidCode = userProfile?.rfidSantri || payment.rfidCode || '';
+      
+      if (!rfidCode) {
+        setHardwareStatus('error');
+        Alert.alert("Error", "RFID santri tidak ditemukan. Silakan hubungi admin untuk pairing RFID.");
+        return;
+      }
+      
+      const result = await startHardwarePaymentWithTimeout(
+        rfidCode,
+        amountAfterCredit,
+        300 // 5 minutes timeout
       );
 
-      if (sessionResult.success) {
-        setHardwareSessionId(sessionResult.sessionId);
+      if (result.success) {
+        setPaymentTimeoutId(result.timeoutId);
         
-        // Start listening for session updates
-        const unsubscribe = listenToHardwarePaymentSession(
-          sessionResult.sessionId,
-          handleHardwareSessionUpdate
-        );
-        setHardwareListener(() => unsubscribe);
+        // Subscribe to real-time payment progress
+        const progressUnsubscribe = subscribeToPaymentProgress((progressData) => {
+          handleModeBasedPaymentProgress(progressData);
+        });
+        setPaymentProgressListener(() => progressUnsubscribe);
+        
+        // Subscribe to final payment results
+        const resultsUnsubscribe = subscribeToPaymentResults((resultData) => {
+          console.log('💰 Raw payment data:', resultData);
+          handleModeBasedPaymentResults(resultData);
+        });
+        setPaymentResultsListener(() => resultsUnsubscribe);
         
       } else {
         setHardwareStatus('error');
-        Alert.alert("Error", "Gagal membuat sesi pembayaran hardware: " + sessionResult.error);
+        Alert.alert("Error", "Gagal memulai mode-based payment session");
       }
     } catch (error) {
       setHardwareStatus('error');
-      Alert.alert("Error", "Terjadi kesalahan saat memulai sesi pembayaran");
+      Alert.alert("Error", "Terjadi kesalahan saat memulai mode-based payment");
     }
   };
 
-  const handleHardwareSessionUpdate = (sessionData) => {
-    if (!sessionData) {
-      setHardwareStatus('error');
-      return;
+  const handleModeBasedPaymentProgress = (progressData) => {
+    if (!progressData) return;
+    
+    // Handle real-time progress updates from ESP32
+    if (progressData.amount_detected && progressData.amount_detected !== '') {
+      setHardwareStatus('processing');
     }
+    
+    // Show immediate feedback for different statuses
+    if (progressData.status) {
+      console.log('💰 Payment progress:', progressData.status);
+      if (progressData.status === 'rfid_salah') {
+        // Don't wait for results listener, show error immediately
+        handleModeBasedPaymentResults(progressData);
+      }
+    }
+  };
 
-    switch (sessionData.status) {
-      case 'waiting':
-        setHardwareStatus('scanning');
-        break;
-      case 'rfid_detected':
-        setHardwareStatus('processing');
-        break;
-      case 'processing':
-        setHardwareStatus('processing');
-        break;
-      case 'completed':
-        setHardwareStatus('success');
-        if (hardwareListener) {
-          hardwareListener();
-          setHardwareListener(null);
-        }
+  const handleModeBasedPaymentResults = (resultData) => {
+    console.log('🔥 Payment result received:', resultData);
+    if (!resultData || !resultData.status) return;
+    
+    // Handle different status responses
+    if (resultData.status === 'completed') {
+      // Cleanup listeners and timeout
+      cleanupModeBasedPayment();
+      
+      setHardwareStatus('success');
+      
+      const detectedAmount = parseInt(resultData.amount_detected) || 0;
+      const requiredAmount = amountAfterCredit || 0;
+      
+      // Check if payment is partial (kurang bayar)
+      if (detectedAmount < requiredAmount) {
+        const remaining = requiredAmount - detectedAmount;
+        
         Alert.alert(
-          "Pembayaran Berhasil! 🎉",
-          `Pembayaran ${payment.periodData?.label} melalui alat Bisyaroh berhasil diproses.\n\nJumlah: ${formatCurrency(sessionData.detectedAmount || amountAfterCredit)}`,
+          "Pembayaran Kurang 💰",
+          `Pembayaran diterima: ${formatCurrency(detectedAmount)}\n` +
+          `Jumlah yang dibutuhkan: ${formatCurrency(requiredAmount)}\n\n` +
+          `✨ Uang Anda ditambahkan ke credit balance\n` +
+          `Sisa pembayaran: ${formatCurrency(remaining)}`,
           [
             {
               text: "OK",
               onPress: () => {
                 setHardwarePayment(false);
                 setHardwareStatus('waiting');
-                setHardwareSessionId(null);
-                onPaymentSuccess(payment, 'hardware_cash', sessionData.detectedAmount || amountAfterCredit);
+                // Pass detected amount for partial payment processing
+                onPaymentSuccess(payment, 'hardware_cash_partial', detectedAmount);
                 onClose();
               }
             }
           ]
         );
-        break;
-      case 'failed':
-      case 'expired':
-        setHardwareStatus('error');
-        if (hardwareListener) {
-          hardwareListener();
-          setHardwareListener(null);
+      } else {
+        // Normal full payment or overpayment
+        const overpayment = detectedAmount - requiredAmount;
+        let message = `Pembayaran ${payment.periodData?.label} berhasil!\n\nJumlah: ${formatCurrency(detectedAmount)}`;
+        
+        if (overpayment > 0) {
+          message += `\n\n✨ Kelebihan ${formatCurrency(overpayment)} ditambahkan ke credit`;
         }
+        
         Alert.alert(
-          "Pembayaran Gagal",
-          sessionData.errorMessage || "Sesi pembayaran telah berakhir atau gagal",
+          "Pembayaran Berhasil! 🎉",
+          message,
           [
             {
               text: "OK",
               onPress: () => {
                 setHardwarePayment(false);
                 setHardwareStatus('waiting');
-                setHardwareSessionId(null);
+                onPaymentSuccess(payment, 'hardware_cash', detectedAmount);
+                onClose();
               }
             }
           ]
         );
-        break;
+      }
+    } else if (resultData.status === 'rfid_salah') {
+      setHardwareStatus('error');
+      Alert.alert(
+        "RFID Salah! ⚠️",
+        "Kartu RFID yang Anda gunakan tidak sesuai. Silakan gunakan kartu RFID Anda yang benar.",
+        [
+          {
+            text: "Coba Lagi",
+            onPress: async () => {
+              setHardwareStatus('scanning');
+              // Clear status in RTDB for ESP32 to set new status
+              await clearPaymentStatus();
+              console.log('🔄 Status cleared - ESP32 can set new status');
+            }
+          },
+          {
+            text: "Batal",
+            style: "cancel",
+            onPress: () => {
+              cleanupModeBasedPayment();
+              setHardwarePayment(false);
+              setHardwareStatus('waiting');
+            }
+          }
+        ]
+      );
+    } else if (resultData.status === 'failed') {
+      setHardwareStatus('error');
+      Alert.alert(
+        "Pembayaran Gagal",
+        "Terjadi kesalahan saat memproses pembayaran. Silakan coba lagi.",
+        [
+          {
+            text: "Coba Lagi",
+            onPress: async () => {
+              setHardwareStatus('scanning');
+              // Clear status in RTDB for retry
+              await clearPaymentStatus();
+              console.log('🔄 Status cleared for retry');
+            }
+          },
+          {
+            text: "Batal",
+            style: "cancel",
+            onPress: () => {
+              cleanupModeBasedPayment();
+              setHardwarePayment(false);
+              setHardwareStatus('waiting');
+            }
+          }
+        ]
+      );
     }
+  };
+
+  const cleanupModeBasedPayment = () => {
+    // Clear timeout
+    if (paymentTimeoutId) {
+      clearModeTimeout(paymentTimeoutId);
+      setPaymentTimeoutId(null);
+    }
+    
+    // Unsubscribe from listeners
+    if (paymentProgressListener) {
+      paymentProgressListener();
+      setPaymentProgressListener(null);
+    }
+    
+    if (paymentResultsListener) {
+      paymentResultsListener();
+      setPaymentResultsListener(null);
+    }
+    
+    // Complete payment session and reset RTDB to idle
+    completePaymentSession();
   };
 
   const simulateHardwarePayment = () => {
@@ -343,17 +454,8 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
 
   const handleClose = async () => {
     if (!processing && !hardwarePayment) {
-      // Cleanup hardware session if exists
-      if (hardwareSessionId) {
-        await cancelHardwarePaymentSession(hardwareSessionId);
-        setHardwareSessionId(null);
-      }
-      
-      // Cleanup listener
-      if (hardwareListener) {
-        hardwareListener();
-        setHardwareListener(null);
-      }
+      // Cleanup mode-based payment session
+      cleanupModeBasedPayment();
       
       setSelectedMethod(null);
       setPaymentMode('exact');
@@ -361,6 +463,28 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
       setHardwarePayment(false);
       setHardwareStatus('waiting');
       onClose();
+    } else if (hardwarePayment) {
+      // Ask user if they want to cancel the active mode-based session
+      Alert.alert(
+        "Cancel Mode-based Payment?",
+        "Ada sesi mode-based payment yang sedang aktif. Batalkan sesi ini?",
+        [
+          { text: "Tidak", style: "cancel" },
+          {
+            text: "Ya, Batalkan",
+            style: "destructive",
+            onPress: () => {
+              cleanupModeBasedPayment();
+              setHardwarePayment(false);
+              setHardwareStatus('waiting');
+              setSelectedMethod(null);
+              setPaymentMode('exact');
+              setCustomAmount('');
+              onClose();
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -541,17 +665,17 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                   disabled={processing}
                 >
                   <View style={[styles.hardwareIcon, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.hardwareIconText}>🤖</Text>
+                    <Text style={styles.hardwareIconText}>🔥</Text>
                   </View>
                   <View style={styles.hardwareInfo}>
                     <Text style={[styles.hardwareName, { color: colors.primary }]}>
-                      Bayar dari Alat Bisyaroh
+                      🚀 Mode-based Hardware Payment
                     </Text>
                     <Text style={[styles.hardwareDescription, { color: colors.gray700 }]}>
-                      Gunakan alat pembayaran fisik dengan RFID
+                      Revolutionary RTDB mode switching • Ultra-simple ESP32 integration
                     </Text>
                     <Text style={[styles.hardwareDetails, { color: colors.gray600 }]}>
-                      Tap RFID → Masukkan uang → Otomatis terbayar
+                      ⚡ Real-time mode control → RFID detection → KNN currency → Auto-complete
                     </Text>
                   </View>
                   <View style={[styles.hardwareArrow, { backgroundColor: colors.primary }]}>
@@ -671,13 +795,13 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                     <>
                       <ActivityIndicator size="large" color={colors.primary} />
                       <Text style={[styles.hardwareStatusTitle, { color: colors.primary }]}>
-                        Menunggu di Alat Bisyaroh
+                        🔥 Mode Payment Aktif di ESP32
                       </Text>
                       <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
-                        Silakan pergi ke alat pembayaran dan tap RFID Anda
+                        ⚡ ESP32 switched to payment mode via RTDB
                       </Text>
                       <Text style={[styles.hardwareStatusSubtext, { color: colors.gray600 }]}>
-                        Sesi akan otomatis berakhir dalam 5 menit
+                        🚀 Real-time RFID detection aktif • Auto-timeout 5 menit
                       </Text>
                     </>
                   )}
@@ -686,22 +810,22 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                     <>
                       <ActivityIndicator size="large" color={colors.success} />
                       <Text style={[styles.hardwareStatusTitle, { color: colors.success }]}>
-                        Memproses Pembayaran
+                        💰 Mode-based Processing
                       </Text>
                       <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
-                        RFID terdeteksi, sedang memproses uang yang dimasukkan...
+                        ⚡ RFID detected via RTDB • KNN currency detection active
                       </Text>
                     </>
                   )}
                   
                   {hardwareStatus === 'success' && (
                     <>
-                      <Text style={styles.hardwareStatusIcon}>✅</Text>
+                      <Text style={styles.hardwareStatusIcon}>🔥</Text>
                       <Text style={[styles.hardwareStatusTitle, { color: colors.success }]}>
-                        Pembayaran Berhasil!
+                        Mode-based Payment Success!
                       </Text>
                       <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
-                        Pembayaran telah diproses melalui alat Bisyaroh
+                        🚀 Revolutionary RTDB architecture worked perfectly!
                       </Text>
                     </>
                   )}
@@ -730,7 +854,11 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               />
             ) : hardwarePayment ? (
               <Button
-                title={hardwareStatus === 'scanning' ? "Menunggu di Alat..." : "Proses Hardware"}
+                title={
+                  hardwareStatus === 'scanning' ? "🔥 Mode Payment Aktif..." : 
+                  hardwareStatus === 'processing' ? "⚡ Processing via RTDB..." :
+                  "🚀 Mode-based Payment"
+                }
                 onPress={() => {}}
                 style={[
                   styles.payButton,

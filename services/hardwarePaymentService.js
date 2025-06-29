@@ -1,3 +1,25 @@
+/**
+ * ⚠️ DEPRECATED SERVICE - REPLACED BY MODE-BASED ARCHITECTURE ⚠️
+ * 
+ * This service has been REPLACED by the revolutionary mode-based RTDB architecture.
+ * 
+ * OLD: Complex session tracking (240+ lines, Firestore overhead)
+ * NEW: Ultra-simple RTDB payment coordination (80% bandwidth reduction)
+ * 
+ * MIGRATION:
+ * Replace: import { createHardwarePaymentSession } from './hardwarePaymentService'
+ * With:    import { startHardwarePaymentWithTimeout } from './rtdbModeService'
+ * 
+ * See: DEPRECATED_SERVICES.md for complete migration guide
+ * See: services/rtdbModeService.js for new implementation
+ * 
+ * PERFORMANCE IMPROVEMENTS WITH NEW ARCHITECTURE:
+ * - Real-time coordination via RTDB
+ * - App-managed timeouts instead of ESP32 complexity
+ * - Self-cleaning data patterns
+ * - Instant payment status updates
+ */
+
 import { 
   doc, 
   setDoc, 

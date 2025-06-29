@@ -19,19 +19,23 @@ import {
   deleteSantriRFID,
 } from "../../services/userService";
 import {
-  startPairing,
-  cancelPairing,
-  getPairingStatus,
-  listenToPairingData,
-} from "../../services/pairingService";
+  startRFIDPairingWithTimeout,
+  subscribeToRFIDDetection,
+  completePairingSession,
+  getMode,
+  clearModeTimeout,
+  resetToIdle
+} from "../../services/rtdbModeService";
 
 export default function DetailSantri() {
   const { santriId } = useLocalSearchParams();
   const [santri, setSantri] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-  const [pairingStatus, setPairingStatus] = useState(null);
+  const [pairingActive, setPairingActive] = useState(false);
   const [pairingLoading, setPairingLoading] = useState(false);
+  const [currentMode, setCurrentMode] = useState('idle');
+  const [pairingTimeoutId, setPairingTimeoutId] = useState(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -47,57 +51,84 @@ export default function DetailSantri() {
     setLoading(false);
   };
 
-  const loadPairingStatus = async () => {
-    const status = await getPairingStatus();
-    setPairingStatus(status);
+  const checkCurrentMode = async () => {
+    try {
+      const mode = await getMode();
+      setCurrentMode(mode);
+      setPairingActive(mode === 'pairing');
+    } catch (error) {
+      console.error('Error checking mode:', error);
+    }
   };
 
   useFocusEffect(
     React.useCallback(() => {
       loadSantriData();
-      loadPairingStatus();
+      checkCurrentMode();
     }, [santriId])
   );
 
   useEffect(() => {
-    const unsubscribe = listenToPairingData((rfidData) => {
-      if (
-        rfidData &&
-        pairingStatus?.isActive &&
-        pairingStatus?.santriId === santriId
-      ) {
-        handleRFIDReceived(rfidData);
+    // Revolutionary mode-based RFID detection (ultra-simple!)
+    const unsubscribe = subscribeToRFIDDetection((rfidCode) => {
+      if (pairingActive) {
+        handleRFIDReceived(rfidCode);
       }
     });
 
-    return () => unsubscribe && unsubscribe();
-  }, [santriId, pairingStatus]);
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [pairingActive]);
 
   useEffect(() => {
-    const interval = setInterval(loadPairingStatus, 2000);
-    return () => clearInterval(interval);
-  }, []);
+    // Cleanup on unmount
+    return () => {
+      if (pairingTimeoutId) {
+        clearModeTimeout(pairingTimeoutId);
+      }
+    };
+  }, [pairingTimeoutId]);
 
-  const handleRFIDReceived = async (rfidData) => {
+  const handleRFIDReceived = async (rfidCode) => {
     Alert.alert(
-      "RFID Terdeteksi",
-      `RFID Code: ${rfidData.rfidCode}\n\nApakah Anda ingin menyimpan RFID ini untuk ${santri?.namaSantri}?`,
+      "RFID Terdeteksi! 🎉",
+      `RFID Code: ${rfidCode}\n\nApakah Anda ingin menyimpan RFID ini untuk ${santri?.namaSantri}?`,
       [
         {
           text: "Batal",
           style: "cancel",
-          onPress: () => cancelPairing(),
+          onPress: async () => {
+            await handleCancelPairing();
+          },
         },
         {
           text: "Simpan",
           onPress: async () => {
-            const result = await updateSantriRFID(santriId, rfidData.rfidCode);
-            await cancelPairing();
-            if (result.success) {
-              Alert.alert("Berhasil", "RFID berhasil dipasangkan!");
-              loadSantriData();
-            } else {
-              Alert.alert("Error", "Gagal menyimpan RFID");
+            try {
+              // Save to Firestore (permanent storage)
+              const result = await updateSantriRFID(santriId, rfidCode);
+              
+              // Complete mode-based session and cleanup RTDB
+              await completePairingSession();
+              
+              // Clear timeout
+              if (pairingTimeoutId) {
+                clearModeTimeout(pairingTimeoutId);
+                setPairingTimeoutId(null);
+              }
+              
+              setPairingActive(false);
+              setCurrentMode('idle');
+              
+              if (result.success) {
+                Alert.alert("Berhasil! ✅", "RFID berhasil dipasangkan dengan sistem mode-based!");
+                loadSantriData();
+              } else {
+                Alert.alert("Error", "Gagal menyimpan RFID");
+              }
+            } catch (error) {
+              Alert.alert("Error", `Terjadi kesalahan: ${error.message}`);
             }
           },
         },
@@ -107,37 +138,60 @@ export default function DetailSantri() {
 
   const handleStartPairing = async () => {
     setPairingLoading(true);
-    const result = await startPairing(santriId);
-    if (result.success) {
-      Alert.alert(
-        "Pairing Dimulai",
-        "Silakan tap kartu RFID pada device ESP32. Pairing akan otomatis berhenti dalam 30 detik.",
-        [{ text: "OK" }]
-      );
-      loadPairingStatus();
-    } else {
-      Alert.alert("Error", result.error);
+    
+    try {
+      // Revolutionary mode-based pairing with automatic timeout!
+      const result = await startRFIDPairingWithTimeout(30);
+      
+      if (result.success) {
+        setPairingTimeoutId(result.timeoutId);
+        setPairingActive(true);
+        setCurrentMode('pairing');
+        
+        Alert.alert(
+          "Mode Pairing Aktif! 🚀",
+          "ESP32 telah diatur ke mode pairing via RTDB.\n\n🔥 Sistem mode-based siap!\n• Silakan tap kartu RFID pada ESP32\n• Timeout otomatis dalam 30 detik\n• Real-time detection aktif",
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert("Error", "Gagal memulai mode pairing");
+      }
+    } catch (error) {
+      Alert.alert("Error", `Terjadi kesalahan: ${error.message}`);
     }
+    
     setPairingLoading(false);
   };
 
   const handleCancelPairing = async () => {
     Alert.alert(
-      "Batalkan Pairing",
-      "Apakah Anda yakin ingin membatalkan pairing RFID?",
+      "Batalkan Mode Pairing",
+      "Apakah Anda yakin ingin membatalkan mode pairing RFID?",
       [
         { text: "Tidak", style: "cancel" },
         {
           text: "Ya, Batalkan",
           style: "destructive",
           onPress: async () => {
-            const result = await cancelPairing();
-            if (result.success) {
+            try {
+              // Reset to idle mode (self-cleaning)
+              await resetToIdle();
+              
+              // Clear timeout
+              if (pairingTimeoutId) {
+                clearModeTimeout(pairingTimeoutId);
+                setPairingTimeoutId(null);
+              }
+              
+              setPairingActive(false);
+              setCurrentMode('idle');
+              
               Alert.alert(
-                "Pairing Dibatalkan",
-                "Pairing RFID telah dibatalkan"
+                "Mode Pairing Dibatalkan ✅",
+                "Sistem telah kembali ke mode idle"
               );
-              loadPairingStatus();
+            } catch (error) {
+              Alert.alert("Error", `Gagal membatalkan pairing: ${error.message}`);
             }
           },
         },
@@ -241,15 +295,20 @@ export default function DetailSantri() {
 
   const startRePairing = async () => {
     try {
-      const result = await startPairing(santriId);
+      // Revolutionary mode-based re-pairing
+      const result = await startRFIDPairingWithTimeout(30);
+      
       if (result.success) {
+        setPairingTimeoutId(result.timeoutId);
+        setPairingActive(true);
+        setCurrentMode('pairing');
+        
         Alert.alert(
-          "Mode Pairing Aktif",
-          "Silakan tempelkan kartu RFID baru pada ESP32.\n\nPairing akan timeout dalam 30 detik."
+          "Mode Re-pairing Aktif! 🔄",
+          "ESP32 siap menerima kartu RFID baru via mode-based system.\n\n• Tempelkan kartu RFID baru pada ESP32\n• RFID lama akan diganti otomatis\n• Timeout dalam 30 detik"
         );
-        loadPairingStatus();
       } else {
-        Alert.alert("Error", result.error || "Gagal memulai pairing");
+        Alert.alert("Error", "Gagal memulai mode re-pairing");
       }
     } catch (error) {
       Alert.alert("Error", `Terjadi kesalahan: ${error.message}`);
@@ -294,9 +353,7 @@ export default function DetailSantri() {
     );
   }
 
-  const isPairingActive =
-    pairingStatus?.isActive && pairingStatus?.santriId === santriId;
-  const canStartPairing = !santri.rfidSantri && !pairingStatus?.isActive;
+  const canStartPairing = !santri.rfidSantri && !pairingActive;
 
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
@@ -406,11 +463,11 @@ export default function DetailSantri() {
               )}
             </View>
 
-            {isPairingActive && (
+            {pairingActive && (
               <View style={styles.pairingActive}>
-                <Text style={styles.pairingText}>🔄 Menunggu RFID...</Text>
+                <Text style={styles.pairingText}>🔥 Mode Pairing Aktif (RTDB)</Text>
                 <Text style={styles.pairingDesc}>
-                  Tap kartu RFID pada device ESP32
+                  ESP32 dalam mode: {currentMode} | Tap kartu RFID sekarang
                 </Text>
               </View>
             )}
@@ -419,7 +476,7 @@ export default function DetailSantri() {
               {canStartPairing && (
                 <Button
                   title={
-                    pairingLoading ? "Memulai Pairing..." : "Mulai Pairing RFID"
+                    pairingLoading ? "Memulai Mode Pairing..." : "🚀 Mulai Mode Pairing (RTDB)"
                   }
                   onPress={handleStartPairing}
                   disabled={pairingLoading || deleting}
@@ -427,9 +484,9 @@ export default function DetailSantri() {
                 />
               )}
 
-              {isPairingActive && (
+              {pairingActive && (
                 <Button
-                  title="Batalkan Pairing"
+                  title="❌ Batalkan Mode Pairing"
                   onPress={handleCancelPairing}
                   variant="outline"
                   style={styles.cancelButton}
@@ -437,7 +494,7 @@ export default function DetailSantri() {
                 />
               )}
 
-              {santri.rfidSantri && !isPairingActive && (
+              {santri.rfidSantri && !pairingActive && (
                 <View style={styles.rfidManagement}>
                   <Button
                     title="🔄 Ganti RFID"

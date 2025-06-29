@@ -23,10 +23,10 @@ import { seederService } from "../../services/seederService";
 import { 
   unlockSolenoid, 
   lockSolenoid, 
-  getSolenoidStatus,
-  listenToSolenoidStatus,
-  emergencyUnlock 
-} from "../../services/solenoidControlService";
+  getSolenoidCommand,
+  subscribeToSolenoidCommand,
+  subscribeToModeChanges
+} from "../../services/rtdbModeService";
 
 function AdminHome() {
   const { currentUser, userProfile, isAdmin } = useAuth();
@@ -45,25 +45,26 @@ function AdminHome() {
     highestUserNumber: 0,
     nextUserNumber: 1,
   });
-  const [solenoidStatus, setSolenoidStatus] = useState({
-    status: 'unknown', // locked, unlocked, unknown
-    deviceOnline: false,
-    lastUpdate: null,
-    batteryLevel: 0
-  });
+  const [solenoidCommand, setSolenoidCommand] = useState('locked'); // 'locked' | 'unlock'
+  const [currentMode, setCurrentMode] = useState('idle'); // 'idle' | 'pairing' | 'payment' | 'solenoid'
   const [solenoidLoading, setSolenoidLoading] = useState(false);
 
   useEffect(() => {
     loadSeederStats();
-    loadSolenoidStatus();
+    loadSolenoidCommand();
     
-    // Listen to real-time solenoid status
-    const unsubscribe = listenToSolenoidStatus((statusData) => {
-      setSolenoidStatus(statusData);
+    // Revolutionary mode-based subscriptions
+    const unsubscribeSolenoid = subscribeToSolenoidCommand((command) => {
+      setSolenoidCommand(command);
+    });
+    
+    const unsubscribeMode = subscribeToModeChanges((mode) => {
+      setCurrentMode(mode);
     });
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      if (unsubscribeSolenoid) unsubscribeSolenoid();
+      if (unsubscribeMode) unsubscribeMode();
     };
   }, []);
 
@@ -81,29 +82,22 @@ function AdminHome() {
     }
   };
 
-  const loadSolenoidStatus = async () => {
+  const loadSolenoidCommand = async () => {
     try {
-      const result = await getSolenoidStatus();
-      if (result.success) {
-        setSolenoidStatus({
-          status: result.status,
-          deviceOnline: result.deviceOnline,
-          lastUpdate: result.lastUpdate,
-          batteryLevel: result.batteryLevel
-        });
-      }
+      const command = await getSolenoidCommand();
+      setSolenoidCommand(command);
     } catch (error) {
-      console.error("Error loading solenoid status:", error);
+      console.error("Error loading solenoid command:", error);
     }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([loadSeederStats(), loadSolenoidStatus()]);
+      await Promise.all([loadSeederStats(), loadSolenoidCommand()]);
       showGeneralNotification(
         "Data Diperbarui",
-        "Data berhasil dimuat ulang",
+        "Data dan status mode-based berhasil dimuat ulang",
         "success",
         { duration: 2000 }
       );
@@ -249,22 +243,32 @@ function AdminHome() {
       
       if (result.success) {
         showGeneralNotification(
-          "Perintah Terkirim",
-          `Perintah buka alat (${duration}s) telah dikirim ke ESP32`,
+          "Mode Solenoid Aktif",
+          `Alat dibuka untuk ${duration} detik. Mode akan kembali ke idle otomatis.`,
           "success",
           { duration: 3000 }
         );
       } else {
-        showGeneralNotification(
-          "Gagal Mengirim Perintah",
-          result.error || "Gagal mengirim perintah buka alat",
-          "error"
-        );
+        // Handle different failure reasons
+        if (result.reason === 'system_busy') {
+          showGeneralNotification(
+            "Sistem Sedang Sibuk",
+            result.message || `Tidak bisa unlock, sistem sedang: ${result.currentMode}`,
+            "warning",
+            { duration: 4000 }
+          );
+        } else {
+          showGeneralNotification(
+            "Gagal Mode Unlock",
+            "Gagal mengaktifkan mode solenoid",
+            "error"
+          );
+        }
       }
     } catch (error) {
       showGeneralNotification(
         "Error",
-        "Terjadi kesalahan saat mengirim perintah",
+        "Terjadi kesalahan saat mengaktifkan mode solenoid",
         "error"
       );
     } finally {
@@ -280,22 +284,22 @@ function AdminHome() {
       
       if (result.success) {
         showGeneralNotification(
-          "Perintah Terkirim",
-          "Perintah tutup alat telah dikirim ke ESP32",
+          "Mode Idle Aktif",
+          "Alat ditutup paksa dan mode kembali ke idle",
           "success",
           { duration: 3000 }
         );
       } else {
         showGeneralNotification(
-          "Gagal Mengirim Perintah",
-          result.error || "Gagal mengirim perintah tutup alat",
+          "Gagal Mode Lock",
+          "Gagal mengaktifkan mode lock",
           "error"
         );
       }
     } catch (error) {
       showGeneralNotification(
         "Error",
-        "Terjadi kesalahan saat mengirim perintah",
+        "Terjadi kesalahan saat mengaktifkan mode lock",
         "error"
       );
     } finally {
@@ -305,8 +309,8 @@ function AdminHome() {
 
   const handleEmergencyUnlock = async () => {
     Alert.alert(
-      "Emergency Unlock",
-      "Apakah Anda yakin ingin membuka alat secara darurat? Ini akan langsung membuka solenoid tanpa batasan waktu.",
+      "🚨 Emergency Mode-based Unlock",
+      "Mode-based emergency unlock akan langsung mengubah command di RTDB tanpa timeout.\n\n⚠️ ESP32 akan membaca perubahan dalam 1 detik!\n\nLanjutkan?",
       [
         { text: "Batal", style: "cancel" },
         {
@@ -315,25 +319,27 @@ function AdminHome() {
           onPress: async () => {
             setSolenoidLoading(true);
             try {
-              const result = await emergencyUnlock();
+              // Emergency uses regular unlock but with very long duration
+              const result = await unlockSolenoid(3600); // 1 hour
               if (result.success) {
+                setSolenoidCommand('unlock');
                 showGeneralNotification(
-                  "Emergency Unlock",
-                  "Perintah emergency unlock telah dikirim!",
+                  "🚨 Emergency Mode-based Unlock",
+                  "RTDB command berhasil dikirim!\n\n⚡ ESP32 akan detect dalam 1 detik\n🔓 Auto-lock dalam 1 jam",
                   "warning",
-                  { duration: 5000 }
+                  { duration: 6000 }
                 );
               } else {
                 showGeneralNotification(
                   "Gagal Emergency Unlock",
-                  result.error,
+                  "Gagal mengirim emergency command via RTDB",
                   "error"
                 );
               }
             } catch (error) {
               showGeneralNotification(
                 "Error",
-                "Terjadi kesalahan saat emergency unlock",
+                "Terjadi kesalahan saat emergency mode-based unlock",
                 "error"
               );
             } finally {
@@ -347,14 +353,14 @@ function AdminHome() {
 
   const handleUnlockWithDuration = () => {
     Alert.alert(
-      "Buka Alat Pembayaran",
-      "Pilih durasi untuk membuka alat:",
+      "🔥 Mode-based Solenoid Control",
+      "Pilih durasi unlock via RTDB (app-managed timeout):",
       [
         { text: "Batal", style: "cancel" },
-        { text: "30 detik", onPress: () => handleUnlockSolenoid(30) },
-        { text: "1 menit", onPress: () => handleUnlockSolenoid(60) },
-        { text: "5 menit", onPress: () => handleUnlockSolenoid(300) },
-        { text: "Emergency", style: "destructive", onPress: handleEmergencyUnlock }
+        { text: "⚡ 30 detik", onPress: () => handleUnlockSolenoid(30) },
+        { text: "🕐 1 menit", onPress: () => handleUnlockSolenoid(60) },
+        { text: "🕔 5 menit", onPress: () => handleUnlockSolenoid(300) },
+        { text: "Emergency (24h)", style: "destructive", onPress: handleEmergencyUnlock }
       ]
     );
   };
@@ -392,45 +398,15 @@ function AdminHome() {
         <View style={styles.solenoidSection}>
           <View style={[styles.solenoidCard, { backgroundColor: colors.white }]}>
             <View style={styles.solenoidHeader}>
-              <View style={styles.solenoidTitleSection}>
-                <Text style={[styles.solenoidTitle, { color: colors.gray900 }]}>Kontrol Alat Pembayaran</Text>
-                <View style={styles.solenoidStatusRow}>
-                  <View style={[
-                    styles.statusIndicator,
-                    { 
-                      backgroundColor: solenoidStatus.deviceOnline 
-                        ? colors.success 
-                        : colors.error 
-                    }
-                  ]} />
-                  <Text style={[styles.statusText, { color: colors.gray600 }]}>
-                    {solenoidStatus.deviceOnline ? 'Online' : 'Offline'} • 
-                    Status: {solenoidStatus.status === 'locked' ? 'Terkunci' : 
-                             solenoidStatus.status === 'unlocked' ? 'Terbuka' : 'Unknown'}
-                  </Text>
-                </View>
-                {solenoidStatus.lastUpdate && (
-                  <Text style={[styles.lastUpdateText, { color: colors.gray500 }]}>
-                    Update: {new Date(solenoidStatus.lastUpdate).toLocaleString('id-ID')}
-                  </Text>
-                )}
-              </View>
-              <View style={[styles.batteryIndicator, { borderColor: colors.gray300 }]}>
-                <View 
-                  style={[
-                    styles.batteryFill,
-                    { 
-                      width: `${solenoidStatus.batteryLevel}%`,
-                      backgroundColor: solenoidStatus.batteryLevel > 50 
-                        ? colors.success 
-                        : solenoidStatus.batteryLevel > 20 
-                        ? colors.warning 
-                        : colors.error
-                    }
-                  ]} 
-                />
-                <Text style={[styles.batteryText, { color: colors.gray700 }]}>
-                  {solenoidStatus.batteryLevel}%
+              <Text style={[styles.solenoidTitle, { color: colors.gray900 }]}>Kontrol Alat 🤖</Text>
+              <View style={[
+                styles.statusBadge,
+                { backgroundColor: currentMode === 'solenoid' ? colors.warning + '20' : colors.primary + '20' }
+              ]}>
+                <Text style={[styles.statusText, { 
+                  color: currentMode === 'solenoid' ? colors.warning : colors.primary 
+                }]}>
+                  {currentMode === 'solenoid' ? '🔓 UNLOCK MODE' : solenoidCommand === 'unlock' ? '🔓 Unlocked' : '🔒 Locked'}
                 </Text>
               </View>
             </View>
@@ -439,12 +415,11 @@ function AdminHome() {
               <TouchableOpacity
                 style={[
                   styles.solenoidButton,
-                  styles.unlockButton,
                   { backgroundColor: colors.success },
                   solenoidLoading && { opacity: 0.7 }
                 ]}
                 onPress={handleUnlockWithDuration}
-                disabled={solenoidLoading || !solenoidStatus.deviceOnline}
+                disabled={solenoidLoading}
                 activeOpacity={0.8}
               >
                 {solenoidLoading ? (
@@ -453,19 +428,18 @@ function AdminHome() {
                   <Text style={styles.solenoidButtonIcon}>🔓</Text>
                 )}
                 <Text style={[styles.solenoidButtonText, { color: colors.white }]}>
-                  Buka Alat
+                  Buka
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
                   styles.solenoidButton,
-                  styles.lockButton,
                   { backgroundColor: colors.error },
                   solenoidLoading && { opacity: 0.7 }
                 ]}
                 onPress={handleLockSolenoid}
-                disabled={solenoidLoading || !solenoidStatus.deviceOnline}
+                disabled={solenoidLoading}
                 activeOpacity={0.8}
               >
                 {solenoidLoading ? (
@@ -474,18 +448,10 @@ function AdminHome() {
                   <Text style={styles.solenoidButtonIcon}>🔒</Text>
                 )}
                 <Text style={[styles.solenoidButtonText, { color: colors.white }]}>
-                  Tutup Alat
+                  Tutup
                 </Text>
               </TouchableOpacity>
             </View>
-
-            {!solenoidStatus.deviceOnline && (
-              <View style={[styles.offlineWarning, { backgroundColor: colors.warning + '15' }]}>
-                <Text style={[styles.offlineWarningText, { color: colors.warning }]}>
-                  ⚠️ ESP32 sedang offline. Perintah tidak dapat dikirim.
-                </Text>
-              </View>
-            )}
           </View>
         </View>
 
@@ -991,56 +957,21 @@ const styles = StyleSheet.create({
   solenoidHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 20,
-  },
-  solenoidTitleSection: {
-    flex: 1,
+    alignItems: "center",
+    marginBottom: 16,
   },
   solenoidTitle: {
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
   },
-  solenoidStatusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  statusIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
   statusText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  lastUpdateText: {
     fontSize: 12,
-    fontStyle: "italic",
-  },
-  batteryIndicator: {
-    width: 60,
-    height: 24,
-    borderWidth: 1,
-    borderRadius: 4,
-    position: "relative",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  batteryFill: {
-    position: "absolute",
-    left: 1,
-    top: 1,
-    bottom: 1,
-    borderRadius: 2,
-  },
-  batteryText: {
-    fontSize: 10,
     fontWeight: "600",
-    zIndex: 1,
   },
   solenoidControls: {
     flexDirection: "row",
@@ -1051,34 +982,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    gap: 8,
-  },
-  unlockButton: {
-    // backgroundColor set dynamically
-  },
-  lockButton: {
-    // backgroundColor set dynamically
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 6,
   },
   solenoidButtonIcon: {
-    fontSize: 20,
+    fontSize: 18,
   },
   solenoidButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  offlineWarning: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  offlineWarningText: {
     fontSize: 14,
-    fontWeight: "500",
-    textAlign: "center",
+    fontWeight: "600",
   },
 });
 

@@ -323,8 +323,13 @@ export const applyCreditToPayments = (payments, creditBalance) => {
   };
 };
 
-export const processPaymentWithCredit = async (timelineId, periodKey, santriId, paymentAmount, paymentMethod) => {
+export const processPaymentWithCredit = async (timelineId, periodKey, santriId, paymentAmount, paymentMethod, partialAmount = null) => {
   try {
+    // Special handling for credit_only (partial payment)
+    if (paymentMethod === 'credit_only' && partialAmount) {
+      return await addPartialPaymentToCredit(santriId, partialAmount);
+    }
+    
     if (!db || !timelineId || !periodKey || !santriId || !paymentAmount) {
       throw new Error('Parameter tidak lengkap');
     }
@@ -404,6 +409,51 @@ export const processPaymentWithCredit = async (timelineId, periodKey, santriId, 
     };
   } catch (error) {
     console.error('Error processing payment with credit:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Add partial payment amount to credit balance only (no period completion)
+ * Used when hardware payment is less than required amount
+ */
+export const addPartialPaymentToCredit = async (santriId, partialAmount) => {
+  try {
+    if (!db || !santriId || !partialAmount) {
+      throw new Error('Parameter tidak lengkap untuk partial payment');
+    }
+
+    // Get current credit balance
+    const creditResult = await getCreditBalance(santriId);
+    if (!creditResult.success) {
+      throw new Error('Gagal mengambil saldo credit');
+    }
+
+    const currentCredit = creditResult.creditBalance;
+    const newCreditBalance = currentCredit + parseInt(partialAmount);
+
+    // Update user's credit balance
+    const userRef = doc(db, 'users', santriId);
+    await updateDoc(userRef, {
+      creditBalance: newCreditBalance,
+      updatedAt: new Date()
+    });
+
+    console.log(`💰 Partial payment added to credit: Rp ${partialAmount} → New balance: Rp ${newCreditBalance}`);
+
+    // Clear cache to force reload
+    clearWaliCache();
+
+    return {
+      success: true,
+      partialAmount: parseInt(partialAmount),
+      previousCredit: currentCredit,
+      newCreditBalance,
+      addedToCredit: parseInt(partialAmount),
+      paymentStatus: 'partial_to_credit'
+    };
+  } catch (error) {
+    console.error('Error adding partial payment to credit:', error);
     return { success: false, error: error.message };
   }
 };

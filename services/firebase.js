@@ -1,11 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getDatabase } from 'firebase/database';
 import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDXKj-ZsNWqkwxvB7iYMgSzXKY1WmUkutw",
   authDomain: "haikal-ef006.firebaseapp.com",
+  databaseURL: "https://haikal-ef006-default-rtdb.firebaseio.com/", // RTDB URL for mode-based architecture
   projectId: "haikal-ef006",
   storageBucket: "haikal-ef006.firebasestorage.app",
   messagingSenderId: "11927917023",
@@ -16,6 +18,7 @@ const firebaseConfig = {
 let app;
 let auth;
 let db;
+let rtdb;
 
 try {
   if (getApps().length === 0) {
@@ -43,11 +46,20 @@ try {
     console.error('Firestore initialization error:', error);
     db = null;
   }
+
+  try {
+    rtdb = getDatabase(app);
+    console.log('✅ RTDB initialized for mode-based architecture');
+  } catch (error) {
+    console.error('⚠️ RTDB initialization error:', error);
+    rtdb = null;
+  }
 } catch (error) {
   console.error('Firebase initialization error:', error);
   app = null;
   auth = null;
   db = null;
+  rtdb = null;
 }
 
-export { auth, db, app };
+export { auth, db, rtdb, app };
