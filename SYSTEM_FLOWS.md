@@ -1431,22 +1431,6 @@ payments/
 **Written by**: waliPaymentService.js, adminPaymentService.js, paymentStatusManager.js
 **Read by**: Payment UI components, admin dashboard, status monitoring
 
-### 4. RFID Pairing Collection (Legacy - Being Phased Out)
-```
-rfid_pairing/
-└── current_session/            // Document ID: Fixed document for current session
-    ├── isActive               // boolean - Whether pairing session is active
-    ├── santriId               // string - Student ID being paired
-    ├── startTime              // string - ISO timestamp when session started
-    ├── rfidCode               // string - Detected RFID code (empty until detected)
-    ├── status                 // string - "waiting" | "received" | "cancelled"
-    ├── cancelledTime          // string - ISO timestamp if cancelled (optional)
-    └── receivedTime           // string - ISO timestamp when RFID received (optional)
-```
-
-**Status**: 🚨 **DEPRECATED** - Replaced by RTDB mode-based pairing
-**Usage**: Legacy RFID pairing (no longer used in current implementation)
-**Migration**: Now handled via RTDB paths `mode` and `pairing_mode`
 
 ## Usage by Service
 
