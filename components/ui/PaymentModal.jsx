@@ -26,12 +26,17 @@ import {
 const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalance = 0, userProfile = null }) => {
   const { theme, loading: settingsLoading } = useSettings();
   const colors = getColors(theme);
+  
+  // Main payment flow states
+  const [paymentSource, setPaymentSource] = useState(null); // 'hardware' | 'app'
   const [selectedMethod, setSelectedMethod] = useState(null);
   const [processing, setProcessing] = useState(false);
-  const [paymentMode, setPaymentMode] = useState('exact');
+  const [paymentMode, setPaymentMode] = useState('exact'); // Only for app payments
   const [customAmount, setCustomAmount] = useState('');
+  
+  // Hardware payment states
   const [hardwarePayment, setHardwarePayment] = useState(false);
-  const [hardwareStatus, setHardwareStatus] = useState('waiting'); // waiting, scanning, processing, success, error
+  const [hardwareStatus, setHardwareStatus] = useState('waiting');
   const [paymentTimeoutId, setPaymentTimeoutId] = useState(null);
   const [paymentProgressListener, setPaymentProgressListener] = useState(null);
   const [paymentResultsListener, setPaymentResultsListener] = useState(null);
@@ -141,6 +146,14 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
       details: "Transfer ke 081234567890",
     },
   ];
+
+  const handlePaymentSourceSelect = (source) => {
+    setPaymentSource(source);
+    if (source === 'hardware') {
+      // Hardware payment doesn't need method/mode selection
+      handleHardwarePayment();
+    }
+  };
 
   const handleMethodSelect = (method) => {
     setSelectedMethod(method);
@@ -457,6 +470,7 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
       // Cleanup mode-based payment session
       cleanupModeBasedPayment();
       
+      setPaymentSource(null);
       setSelectedMethod(null);
       setPaymentMode('exact');
       setCustomAmount('');
@@ -477,6 +491,7 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               cleanupModeBasedPayment();
               setHardwarePayment(false);
               setHardwareStatus('waiting');
+              setPaymentSource(null);
               setSelectedMethod(null);
               setPaymentMode('exact');
               setCustomAmount('');
@@ -507,7 +522,7 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
             style={[styles.modalHeader, { borderBottomColor: colors.gray200 }]}
           >
             <Text style={[styles.modalTitle, { color: colors.gray900 }]}>
-              Pilih Metode Pembayaran
+              {!paymentSource ? "Pilih Sumber Pembayaran" : paymentSource === 'hardware' ? "Pembayaran Hardware" : "Pilih Metode Pembayaran"}
             </Text>
             {!processing && (
               <TouchableOpacity
@@ -563,7 +578,73 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               )}
             </View>
 
-            {(amountAfterCredit || 0) > 0 && (
+            {/* Payment Source Selection */}
+            {!paymentSource && (amountAfterCredit || 0) > 0 && (
+              <View style={styles.paymentSourceSection}>
+                <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
+                  Pilih Sumber Pembayaran:
+                </Text>
+                
+                {/* Hardware Payment Option */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentSourceCard,
+                    { backgroundColor: colors.primary + "15", borderColor: colors.primary }
+                  ]}
+                  onPress={() => handlePaymentSourceSelect('hardware')}
+                  disabled={processing}
+                >
+                  <View style={[styles.sourceIcon, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.sourceIconText}>🔥</Text>
+                  </View>
+                  <View style={styles.sourceInfo}>
+                    <Text style={[styles.sourceName, { color: colors.primary }]}>
+                      🚀 Pembayaran dari Alat
+                    </Text>
+                    <Text style={[styles.sourceDescription, { color: colors.gray700 }]}>
+                      Mode-based hardware payment dengan RFID + Currency detection
+                    </Text>
+                    <Text style={[styles.sourceDetails, { color: colors.gray600 }]}>
+                      ⚡ Tap kartu RFID → Masukkan uang → Otomatis selesai
+                    </Text>
+                  </View>
+                  <View style={[styles.sourceArrow, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.sourceArrowText, { color: colors.white }]}>→</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* App Payment Option */}
+                <TouchableOpacity
+                  style={[
+                    styles.paymentSourceCard,
+                    { backgroundColor: colors.gray50, borderColor: colors.gray300 }
+                  ]}
+                  onPress={() => handlePaymentSourceSelect('app')}
+                  disabled={processing}
+                >
+                  <View style={[styles.sourceIcon, { backgroundColor: colors.gray200 }]}>
+                    <Text style={styles.sourceIconText}>💳</Text>
+                  </View>
+                  <View style={styles.sourceInfo}>
+                    <Text style={[styles.sourceName, { color: colors.gray900 }]}>
+                      📱 Pembayaran dari Aplikasi
+                    </Text>
+                    <Text style={[styles.sourceDescription, { color: colors.gray700 }]}>
+                      Transfer bank, e-wallet, atau metode digital lainnya
+                    </Text>
+                    <Text style={[styles.sourceDetails, { color: colors.gray600 }]}>
+                      💰 Bisa bayar pas atau custom amount sesuai kebutuhan
+                    </Text>
+                  </View>
+                  <View style={[styles.sourceArrow, { backgroundColor: colors.gray400 }]}>
+                    <Text style={[styles.sourceArrowText, { color: colors.white }]}>→</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Payment Mode Selection - Only for App payments */}
+            {paymentSource === 'app' && (amountAfterCredit || 0) > 0 && (
               <View style={styles.paymentModeSection}>
                 <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
                   Mode Pembayaran:
@@ -649,45 +730,12 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               </View>
             )}
 
-            {amountAfterCredit > 0 && !hardwarePayment && (
+            {/* Payment Methods - Only for App payments */}
+            {paymentSource === 'app' && amountAfterCredit > 0 && !hardwarePayment && (
               <View style={styles.methodsSection}>
                 <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
-                  Pilih Metode Pembayaran:
+                  Pilih Metode Pembayaran Digital:
                 </Text>
-
-                {/* Hardware Payment Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.hardwarePaymentCard,
-                    { backgroundColor: colors.primary + "15", borderColor: colors.primary }
-                  ]}
-                  onPress={handleHardwarePayment}
-                  disabled={processing}
-                >
-                  <View style={[styles.hardwareIcon, { backgroundColor: colors.primary }]}>
-                    <Text style={styles.hardwareIconText}>🔥</Text>
-                  </View>
-                  <View style={styles.hardwareInfo}>
-                    <Text style={[styles.hardwareName, { color: colors.primary }]}>
-                      🚀 Mode-based Hardware Payment
-                    </Text>
-                    <Text style={[styles.hardwareDescription, { color: colors.gray700 }]}>
-                      Revolutionary RTDB mode switching • Ultra-simple ESP32 integration
-                    </Text>
-                    <Text style={[styles.hardwareDetails, { color: colors.gray600 }]}>
-                      ⚡ Real-time mode control → RFID detection → KNN currency → Auto-complete
-                    </Text>
-                  </View>
-                  <View style={[styles.hardwareArrow, { backgroundColor: colors.primary }]}>
-                    <Text style={[styles.hardwareArrowText, { color: colors.white }]}>→</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <View style={[styles.dividerSection, { borderTopColor: colors.gray200 }]}>
-                  <Text style={[styles.dividerText, { color: colors.gray500 }]}>
-                    Atau pilih pembayaran digital:
-                  </Text>
-                </View>
 
               {paymentMethods.map((method) => (
                 <TouchableOpacity
@@ -760,7 +808,7 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               </View>
             )}
 
-            {processing && (
+            {processing && paymentSource === 'app' && (
               <View style={styles.processingSection}>
                 <ActivityIndicator size="large" color={colors.primary} />
                 <Text
@@ -868,7 +916,17 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                 ]}
                 disabled={true}
               />
-            ) : (
+            ) : !paymentSource ? (
+              <Button
+                title="Pilih Sumber Pembayaran"
+                onPress={() => {}}
+                style={[
+                  styles.payButton,
+                  { backgroundColor: colors.gray400 },
+                ]}
+                disabled={true}
+              />
+            ) : paymentSource === 'app' ? (
               <Button
                 title={processing ? "Memproses..." : "Bayar Sekarang"}
                 onPress={handlePayNow}
@@ -881,6 +939,16 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                   },
                 ]}
                 disabled={!selectedMethod || processing}
+              />
+            ) : (
+              <Button
+                title="🔥 Hardware Payment Active"
+                onPress={() => {}}
+                style={[
+                  styles.payButton,
+                  { backgroundColor: colors.primary },
+                ]}
+                disabled={true}
               />
             )}
           </View>
@@ -972,6 +1040,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 8,
     textAlign: 'center',
+  },
+  paymentSourceSection: {
+    marginBottom: 20,
+  },
+  paymentSourceCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  sourceIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  sourceIconText: {
+    fontSize: 24,
+  },
+  sourceInfo: {
+    flex: 1,
+  },
+  sourceName: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  sourceDescription: {
+    fontSize: 14,
+    marginBottom: 2,
+    fontWeight: "500",
+  },
+  sourceDetails: {
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  sourceArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sourceArrowText: {
+    fontSize: 18,
+    fontWeight: "bold",
   },
   paymentModeSection: {
     marginBottom: 20,
