@@ -48,6 +48,8 @@ function AdminHome() {
   const [solenoidCommand, setSolenoidCommand] = useState('locked'); // 'locked' | 'unlock'
   const [currentMode, setCurrentMode] = useState('idle'); // 'idle' | 'pairing' | 'payment' | 'solenoid'
   const [solenoidLoading, setSolenoidLoading] = useState(false);
+  const [countdownTime, setCountdownTime] = useState(0); // Countdown timer in seconds
+  const [countdownInterval, setCountdownInterval] = useState(null);
 
   useEffect(() => {
     loadSeederStats();
@@ -65,6 +67,9 @@ function AdminHome() {
     return () => {
       if (unsubscribeSolenoid) unsubscribeSolenoid();
       if (unsubscribeMode) unsubscribeMode();
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
     };
   }, []);
 
@@ -235,6 +240,41 @@ function AdminHome() {
     router.push("/(admin)/payment-status");
   };
 
+  const formatCountdownTime = (seconds) => {
+    if (seconds <= 0) return "";
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes}m ${remainingSeconds}s`;
+    }
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
+
+  const startCountdown = (duration) => {
+    setCountdownTime(duration);
+    
+    // Clear any existing interval
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+    }
+    
+    const interval = setInterval(() => {
+      setCountdownTime(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setCountdownInterval(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    setCountdownInterval(interval);
+  };
+
   const handleUnlockSolenoid = async (duration = 30) => {
     setSolenoidLoading(true);
     
@@ -242,6 +282,9 @@ function AdminHome() {
       const result = await unlockSolenoid(duration);
       
       if (result.success) {
+        // Start countdown timer
+        startCountdown(duration);
+        
         showGeneralNotification(
           "Mode Solenoid Aktif",
           `Alat dibuka untuk ${duration} detik. Mode akan kembali ke idle otomatis.`,
@@ -278,6 +321,13 @@ function AdminHome() {
 
   const handleLockSolenoid = async () => {
     setSolenoidLoading(true);
+    
+    // Stop countdown timer when manually locking
+    if (countdownInterval) {
+      clearInterval(countdownInterval);
+      setCountdownInterval(null);
+    }
+    setCountdownTime(0);
     
     try {
       const result = await lockSolenoid();
@@ -322,6 +372,8 @@ function AdminHome() {
               // Emergency uses regular unlock but with very long duration
               const result = await unlockSolenoid(3600); // 1 hour
               if (result.success) {
+                // Start countdown for emergency unlock
+                startCountdown(3600);
                 setSolenoidCommand('unlock');
                 showGeneralNotification(
                   "🚨 Emergency Mode-based Unlock",
@@ -398,7 +450,7 @@ function AdminHome() {
         <View style={styles.solenoidSection}>
           <View style={[styles.solenoidCard, { backgroundColor: colors.white }]}>
             <View style={styles.solenoidHeader}>
-              <Text style={[styles.solenoidTitle, { color: colors.gray900 }]}>Kontrol Alat 🤖</Text>
+              <Text style={[styles.solenoidTitle, { color: colors.gray900 }]}>Kontrol Solenoid 🔐</Text>
               <View style={[
                 styles.statusBadge,
                 { backgroundColor: currentMode === 'solenoid' ? colors.warning + '20' : colors.primary + '20' }
@@ -415,11 +467,11 @@ function AdminHome() {
               <TouchableOpacity
                 style={[
                   styles.solenoidButton,
-                  { backgroundColor: colors.success },
+                  { backgroundColor: countdownTime > 0 ? colors.warning : colors.success },
                   solenoidLoading && { opacity: 0.7 }
                 ]}
                 onPress={handleUnlockWithDuration}
-                disabled={solenoidLoading}
+                disabled={solenoidLoading || countdownTime > 0}
                 activeOpacity={0.8}
               >
                 {solenoidLoading ? (
@@ -428,7 +480,7 @@ function AdminHome() {
                   <Text style={styles.solenoidButtonIcon}>🔓</Text>
                 )}
                 <Text style={[styles.solenoidButtonText, { color: colors.white }]}>
-                  Buka
+                  {countdownTime > 0 ? `Aktif (${formatCountdownTime(countdownTime)})` : "Buka"}
                 </Text>
               </TouchableOpacity>
 
