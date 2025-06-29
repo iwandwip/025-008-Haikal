@@ -60,7 +60,7 @@ Data Bridge: RTDB (real-time) → Firestore (permanent storage)
 - Complex queries and relationships
 - Permanent data storage
 
-### Core RTDB Schema for Smart Bisyaroh
+### Core RTDB Schema for Smart Bisyaroh (Ultra-Simple)
 
 ```javascript
 {
@@ -75,43 +75,28 @@ Data Bridge: RTDB (real-time) → Firestore (permanent storage)
     // Data FROM Mobile App TO ESP32
     "get": {
       "user_id": "",           // "user123"
-      "amount_required": "",   // "5000"
-      "session_id": "",        // "session_456"
-      "timeline_id": "",       // "timeline_789"
-      "period_key": ""         // "2024-01"
+      "amount_required": ""    // "5000"
     },
     
     // Data FROM ESP32 TO Mobile App
     "set": {
       "rfid_detected": "",     // "04a2bc1f294e80"
       "amount_detected": "",   // "10000"
-      "payment_status": "",    // "processing" | "completed" | "failed"
-      "timestamp": "",         // "2024-01-15T10:30:00Z"
-      "error_message": ""      // Error details if failed
+      "status": ""             // "completed" | "failed"
     }
   },
   
-  // ===== SOLENOID CONTROL MODE =====
-  "solenoid_mode": {
-    "command": "",           // "unlock" | "lock" | "emergency"
-    "duration": "",          // "30" (seconds for unlock)
-    "admin_id": "",          // "admin"
-    "status": "",            // "pending" | "executed" | "failed"
-    "executed_at": "",       // "2024-01-15T10:30:00Z"
-    "response": ""           // Device response message
-  },
-  
-  // ===== DEVICE STATUS =====
-  "device_status": {
-    "online": true,
-    "battery_level": "85",
-    "solenoid_status": "locked",  // "locked" | "unlocked"
-    "last_update": "2024-01-15T10:30:00Z",
-    "firmware_version": "v1.2.0",
-    "total_commands": "245"
-  }
+  // ===== SOLENOID CONTROL =====
+  "solenoid_command": "locked"   // "unlock" | "locked"
 }
 ```
+
+**Key Simplifications:**
+- **Removed device_status**: No complex device monitoring
+- **Simplified solenoid**: Just command state, no metadata
+- **Simplified payment**: Removed unnecessary session tracking
+- **Timeout handled by app**: ESP32 just reads current state
+- **No status tracking**: ESP32 just executes, app handles timing
 
 ## System Flows Overview
 
@@ -259,23 +244,36 @@ const handleRFIDPairing = () => {
 
 ```cpp
 String currentMode = "idle";
+String currentSolenoidState = "locked";
 
 void loop() {
-  // Single point of control - ultra responsive!
+  // Read system mode (single source of truth)
   currentMode = Firebase.getString(firebaseData, "mode");
   
-  // Mode-based state machine (simple!)
+  // Ultra-simple mode switching
   if (currentMode == "idle") {
     handleIdleMode();
   } else if (currentMode == "pairing") {
     handlePairingMode();
   } else if (currentMode == "payment") {
     handlePaymentMode();
-  } else if (currentMode == "solenoid") {
-    handleSolenoidMode();
   }
   
+  // Always check solenoid command (independent of mode)
+  handleSolenoidControl();
+  
   delay(1000); // Responsive 1-second checking
+}
+
+void handleIdleMode() {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("=== SMART BISYAROH ===");
+  display.println("Payment System Ready");
+  display.println("");
+  display.println("Status: Idle");
+  display.println("Solenoid: " + currentSolenoidState);
+  display.display();
 }
 
 void handlePairingMode() {
@@ -285,10 +283,10 @@ void handlePairingMode() {
   display.println("Tap your card...");
   display.display();
   
-  // Simple RFID detection - no JSON building!
+  // Simple RFID detection
   String rfidCode = getRFIDReading();
   if (!rfidCode.isEmpty()) {
-    // Direct path update to RTDB
+    // Direct update to RTDB
     Firebase.setString(firebaseData, "pairing_mode", rfidCode);
     
     display.clearDisplay();
@@ -299,15 +297,52 @@ void handlePairingMode() {
   }
 }
 
-void handleIdleMode() {
+void handlePaymentMode() {
+  // Read payment session data
+  String userId = Firebase.getString(firebaseData, "payment_mode/get/user_id");
+  String amountRequired = Firebase.getString(firebaseData, "payment_mode/get/amount_required");
+  
   display.clearDisplay();
-  display.setCursor(0, 0);
-  display.println("=== SMART BISYAROH ===");
-  display.println("Payment System Ready");
-  display.println("");
-  display.println("Status: Idle");
-  display.println("Waiting for command...");
+  display.println("Payment Session");
+  display.println("User: " + userId);
+  display.println("Amount: Rp " + amountRequired);
+  display.println("Tap RFID...");
   display.display();
+  
+  // RFID validation and currency detection
+  String rfidCode = getRFIDReading();
+  if (!rfidCode.isEmpty()) {
+    Firebase.setString(firebaseData, "payment_mode/set/rfid_detected", rfidCode);
+    
+    display.println("Insert money...");
+    display.display();
+    
+    // Currency detection
+    int detectedAmount = detectCurrencyKNN();
+    if (detectedAmount > 0) {
+      Firebase.setString(firebaseData, "payment_mode/set/amount_detected", String(detectedAmount));
+      Firebase.setString(firebaseData, "payment_mode/set/status", "completed");
+      
+      display.clearDisplay();
+      display.println("Payment Success!");
+      display.println("Amount: Rp " + String(detectedAmount));
+      display.display();
+      delay(3000);
+    }
+  }
+}
+
+void handleSolenoidControl() {
+  String command = Firebase.getString(firebaseData, "solenoid_command");
+  
+  if (command == "unlock" && currentSolenoidState != "unlock") {
+    digitalWrite(SOLENOID_PIN, HIGH);
+    currentSolenoidState = "unlock";
+  } 
+  else if (command == "locked" && currentSolenoidState != "locked") {
+    digitalWrite(SOLENOID_PIN, LOW);
+    currentSolenoidState = "locked";
+  }
 }
 ```
 
@@ -332,12 +367,84 @@ updateDoc["fields"]["receivedTime"]["timestampValue"] = getCurrentISOTime();
 firestoreClient.patchDocument(doc_path, updateDoc.as<String>());
 ```
 
-**After (Mode-based RTDB):**
+**After (Ultra-Simple Mode-based RTDB):**
 ```cpp
-// 3 lines of simple operations
+// 2-3 lines of simple operations
 String mode = Firebase.getString(firebaseData, "mode");
-String rfidCode = getRFIDReading();
+String solenoidCommand = Firebase.getString(firebaseData, "solenoid_command");
 Firebase.setString(firebaseData, "pairing_mode", rfidCode);
+```
+
+### 5. Ultra-Simple Mobile App Service
+
+**Location**: `services/rtdbModeService.js` - Minimal Implementation
+
+```javascript
+import { getDatabase, ref, onValue, set } from 'firebase/database';
+const rtdb = getDatabase();
+
+// === CORE MODE MANAGEMENT ===
+export const setMode = async (mode) => {
+  await set(ref(rtdb, 'mode'), mode);
+};
+
+export const resetToIdle = async () => {
+  await set(ref(rtdb, 'mode'), 'idle');
+  await set(ref(rtdb, 'pairing_mode'), '');
+  await set(ref(rtdb, 'payment_mode'), { get: {}, set: {} });
+};
+
+// === RFID PAIRING ===
+export const startRFIDPairing = async () => {
+  await set(ref(rtdb, 'mode'), 'pairing');
+  await set(ref(rtdb, 'pairing_mode'), '');
+};
+
+export const subscribeToRFIDDetection = (callback) => {
+  return onValue(ref(rtdb, 'pairing_mode'), (snapshot) => {
+    const rfidCode = snapshot.val();
+    if (rfidCode && rfidCode !== '') {
+      callback(rfidCode);
+    }
+  });
+};
+
+// === HARDWARE PAYMENT ===
+export const startHardwarePayment = async (userId, amountRequired) => {
+  await set(ref(rtdb, 'mode'), 'payment');
+  await set(ref(rtdb, 'payment_mode/get'), {
+    user_id: userId,
+    amount_required: amountRequired.toString()
+  });
+  await set(ref(rtdb, 'payment_mode/set'), {
+    rfid_detected: '',
+    amount_detected: '',
+    status: ''
+  });
+};
+
+export const subscribeToPaymentResults = (callback) => {
+  return onValue(ref(rtdb, 'payment_mode/set'), (snapshot) => {
+    const results = snapshot.val();
+    if (results && results.status === 'completed') {
+      callback(results);
+    }
+  });
+};
+
+// === SOLENOID CONTROL ===
+export const unlockSolenoid = async (durationSeconds = 30) => {
+  await set(ref(rtdb, 'solenoid_command'), 'unlock');
+  
+  // App handles timeout
+  setTimeout(async () => {
+    await set(ref(rtdb, 'solenoid_command'), 'locked');
+  }, durationSeconds * 1000);
+};
+
+export const lockSolenoid = async () => {
+  await set(ref(rtdb, 'solenoid_command'), 'locked');
+};
 ```
 
 ### 4. Performance Improvements
@@ -1319,7 +1426,7 @@ export const listenToHardwarePaymentSession = (sessionId, callback) => {
 
 The solenoid control system uses **mode-based coordination** for ultra-responsive remote lock/unlock control. Instead of complex command queuing, it uses simple RTDB mode switching for instant device communication.
 
-## Mode-based Solenoid Control Flow Diagram
+## Ultra-Simple Solenoid Control Flow Diagram
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -1330,60 +1437,59 @@ The solenoid control system uses **mode-based coordination** for ultra-responsiv
           │ 1. Admin Tap         │                      │                      │
           │   "Buka Alat"        │                      │                      │
           │                      │                      │                      │
-          │ 2. Select Duration   │                      │                      │
-          │   Alert Options:     │                      │                      │
-          │   • 30 detik         │                      │                      │
-          │   • 1 menit          │                      │                      │
-          │   • 5 menit          │                      │                      │
-          │   • Emergency        │                      │                      │
+          │ 2. Set Command       │                      │                      │
+          ├─────────────────────▶│ solenoid_command     │                      │
+          │                      │     = "unlock"       │                      │
           │                      │                      │                      │
-          │ 3. Set Solenoid Mode │                      │                      │
-          ├─────────────────────▶│ mode = "solenoid"    │                      │
-          │                      │ solenoid_mode:       │                      │
-          │                      │ {command: "unlock",  │                      │
-          │                      │  duration: "30",     │                      │
-          │                      │  admin_id: "admin",  │                      │
-          │                      │  status: "pending"}  │                      │
+          │                      │ 3. ESP32 Reads State │                      │
+          │                      ├─────────────────────▶│ currentSolenoid=     │
+          │                      │    (1-second check)  │     "unlock"         │
           │                      │                      │                      │
-          │                      │ 4. Instant Detection │                      │
-          │                      ├─────────────────────▶│ currentMode="solenoid"│
-          │                      │    (1-second check)  │                      │
-          │                      │                      │                      │
-          │ 5. Show Loading      │                      │ 6. Read Command      │
-          │   "Mengirim Perintah │                      │   solenoid_mode/*    │
-          │    ke ESP32..."      │                      │                      │
-          │                      │                      │                      │
-          │                      │                      │ 7. Execute Unlock    │
-          │                      │                      ├─────────────────────▶│
+          │ 4. Start App Timer   │                      │ 5. Execute Unlock    │
+          │   setTimeout(30s)    │                      ├─────────────────────▶│
           │                      │                      │   digitalWrite(HIGH) │
           │                      │                      │                      │
-          │                      │ 8. Update Status     │                      │
-          │                      │ ◄────────────────────┤                      │
-          │                      │ solenoid_mode:       │                      │
-          │                      │ {status: "executed", │                      │
-          │                      │  executed_at: now,   │                      │
-          │                      │  response: "Success"}│                      │
+          │                      │                      │ 6. LCD Shows         │
+          │                      │                      │   "Alat Terbuka"     │
           │                      │                      │                      │
-          │                      │ 9. Update Device     │                      │
-          │                      │ ◄────────────────────┤                      │
-          │                      │ device_status:       │                      │
-          │                      │ {solenoid_status:    │                      │
-          │                      │  "unlocked"}         │                      │
+          │ 7. Timer Expires     │                      │                      │
+          │   (30 seconds)       │                      │                      │
           │                      │                      │                      │
-          │ 10. Success Toast    │                      │ 11. LCD Feedback     │
-          │    "Alat terbuka     │                      │    "Alat Terbuka"    │
-          │     selama 30s"      │                      │    "Auto lock: 30s"  │
+          │ 8. Auto Lock         │                      │                      │
+          ├─────────────────────▶│ solenoid_command     │                      │
+          │                      │     = "locked"       │                      │
           │                      │                      │                      │
-          │ 11. Real-time Status │                      │ 12. Timer & Auto-lock│ 13. Auto Lock      │
-          │    Update (battery,  │                      │    setTimeout(30s)   ├────────────────────▶│
-          │    online status)    │                      │                      │   digitalWrite(LOW) │
-          │                      │                      │                      │                     │
-          │                      │                      │ 14. Reset to Idle    │                     │
-          │                      │                      ├─────────────────────▶│                     │
-          │                      │                      │ mode = "idle"         │                     │
+          │                      │ 9. ESP32 Reads State │                      │
+          │                      ├─────────────────────▶│ currentSolenoid=     │
+          │                      │    (1-second check)  │     "locked"         │
+          │                      │                      │                      │
+          │                      │                      │ 10. Execute Lock     │
+          │                      │                      ├─────────────────────▶│
+          │                      │                      │   digitalWrite(LOW)  │
+          │                      │                      │                      │
+          │                      │                      │ 11. LCD Shows        │
+          │                      │                      │   "Alat Terkunci"    │
 ```
 
-**Timeline**: Command execution ~1-2 seconds, Auto-lock after specified duration
+**Timeline**: Command execution ~1 second, Timeout managed by mobile app
+
+**Ultra-Simple ESP32 Code:**
+```cpp
+void handleSolenoidControl() {
+  String command = Firebase.getString(firebaseData, "solenoid_command");
+  
+  if (command == "unlock" && currentSolenoidState != "unlock") {
+    digitalWrite(SOLENOID_PIN, HIGH);
+    currentSolenoidState = "unlock";
+    lcd.print("Alat Terbuka");
+  } 
+  else if (command == "locked" && currentSolenoidState != "locked") {
+    digitalWrite(SOLENOID_PIN, LOW);
+    currentSolenoidState = "locked";
+    lcd.print("Alat Terkunci");
+  }
+}
+```
 
 ## Solenoid Control Implementation
 
