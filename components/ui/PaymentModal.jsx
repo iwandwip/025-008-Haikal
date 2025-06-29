@@ -13,6 +13,11 @@ import {
 import { useSettings } from "../../contexts/SettingsContext";
 import { getColors } from "../../constants/Colors";
 import Button from "./Button";
+import { 
+  createHardwarePaymentSession, 
+  listenToHardwarePaymentSession,
+  cancelHardwarePaymentSession 
+} from "../../services/hardwarePaymentService";
 
 const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalance = 0 }) => {
   const { theme, loading: settingsLoading } = useSettings();
@@ -21,6 +26,10 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
   const [processing, setProcessing] = useState(false);
   const [paymentMode, setPaymentMode] = useState('exact');
   const [customAmount, setCustomAmount] = useState('');
+  const [hardwarePayment, setHardwarePayment] = useState(false);
+  const [hardwareStatus, setHardwareStatus] = useState('waiting'); // waiting, scanning, processing, success, error
+  const [hardwareSessionId, setHardwareSessionId] = useState(null);
+  const [hardwareListener, setHardwareListener] = useState(null);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("id-ID", {
@@ -184,11 +193,173 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
     }, 2000);
   };
 
-  const handleClose = () => {
-    if (!processing) {
+  const handleHardwarePayment = async () => {
+    setHardwarePayment(true);
+    setHardwareStatus('waiting');
+    
+    Alert.alert(
+      "Bayar dari Alat Bisyaroh 🤖",
+      "Silakan pergi ke alat pembayaran Bisyaroh dan:\n\n1. Tap kartu RFID Anda\n2. Masukkan uang sesuai nominal\n3. Tunggu konfirmasi pembayaran\n\nSesi ini akan aktif selama 5 menit.",
+      [
+        {
+          text: "Batal",
+          style: "cancel",
+          onPress: () => {
+            setHardwarePayment(false);
+            setHardwareStatus('waiting');
+          }
+        },
+        {
+          text: "Mulai",
+          onPress: async () => {
+            await startHardwarePaymentSession();
+          }
+        }
+      ]
+    );
+  };
+
+  const startHardwarePaymentSession = async () => {
+    try {
+      setHardwareStatus('scanning');
+      
+      // Create hardware payment session in Firebase
+      const sessionResult = await createHardwarePaymentSession(
+        payment.santriId,
+        payment.timelineId || 'default',
+        payment.periodKey,
+        amountAfterCredit
+      );
+
+      if (sessionResult.success) {
+        setHardwareSessionId(sessionResult.sessionId);
+        
+        // Start listening for session updates
+        const unsubscribe = listenToHardwarePaymentSession(
+          sessionResult.sessionId,
+          handleHardwareSessionUpdate
+        );
+        setHardwareListener(() => unsubscribe);
+        
+      } else {
+        setHardwareStatus('error');
+        Alert.alert("Error", "Gagal membuat sesi pembayaran hardware: " + sessionResult.error);
+      }
+    } catch (error) {
+      setHardwareStatus('error');
+      Alert.alert("Error", "Terjadi kesalahan saat memulai sesi pembayaran");
+    }
+  };
+
+  const handleHardwareSessionUpdate = (sessionData) => {
+    if (!sessionData) {
+      setHardwareStatus('error');
+      return;
+    }
+
+    switch (sessionData.status) {
+      case 'waiting':
+        setHardwareStatus('scanning');
+        break;
+      case 'rfid_detected':
+        setHardwareStatus('processing');
+        break;
+      case 'processing':
+        setHardwareStatus('processing');
+        break;
+      case 'completed':
+        setHardwareStatus('success');
+        if (hardwareListener) {
+          hardwareListener();
+          setHardwareListener(null);
+        }
+        Alert.alert(
+          "Pembayaran Berhasil! 🎉",
+          `Pembayaran ${payment.periodData?.label} melalui alat Bisyaroh berhasil diproses.\n\nJumlah: ${formatCurrency(sessionData.detectedAmount || amountAfterCredit)}`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setHardwarePayment(false);
+                setHardwareStatus('waiting');
+                setHardwareSessionId(null);
+                onPaymentSuccess(payment, 'hardware_cash', sessionData.detectedAmount || amountAfterCredit);
+                onClose();
+              }
+            }
+          ]
+        );
+        break;
+      case 'failed':
+      case 'expired':
+        setHardwareStatus('error');
+        if (hardwareListener) {
+          hardwareListener();
+          setHardwareListener(null);
+        }
+        Alert.alert(
+          "Pembayaran Gagal",
+          sessionData.errorMessage || "Sesi pembayaran telah berakhir atau gagal",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                setHardwarePayment(false);
+                setHardwareStatus('waiting');
+                setHardwareSessionId(null);
+              }
+            }
+          ]
+        );
+        break;
+    }
+  };
+
+  const simulateHardwarePayment = () => {
+    // Simulate hardware payment process for demo
+    setTimeout(() => {
+      setHardwareStatus('processing');
+    }, 3000);
+    
+    setTimeout(() => {
+      setHardwareStatus('success');
+      Alert.alert(
+        "Pembayaran Berhasil! 🎉",
+        `Pembayaran ${payment.periodData?.label} melalui alat Bisyaroh berhasil diproses.`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setHardwarePayment(false);
+              setHardwareStatus('waiting');
+              onPaymentSuccess(payment, 'hardware_cash', amountAfterCredit);
+              onClose();
+            }
+          }
+        ]
+      );
+    }, 6000);
+  };
+
+  const handleClose = async () => {
+    if (!processing && !hardwarePayment) {
+      // Cleanup hardware session if exists
+      if (hardwareSessionId) {
+        await cancelHardwarePaymentSession(hardwareSessionId);
+        setHardwareSessionId(null);
+      }
+      
+      // Cleanup listener
+      if (hardwareListener) {
+        hardwareListener();
+        setHardwareListener(null);
+      }
+      
       setSelectedMethod(null);
       setPaymentMode('exact');
       setCustomAmount('');
+      setHardwarePayment(false);
+      setHardwareStatus('waiting');
       onClose();
     }
   };
@@ -354,11 +525,45 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               </View>
             )}
 
-            {amountAfterCredit > 0 && (
+            {amountAfterCredit > 0 && !hardwarePayment && (
               <View style={styles.methodsSection}>
                 <Text style={[styles.sectionTitle, { color: colors.gray900 }]}>
                   Pilih Metode Pembayaran:
                 </Text>
+
+                {/* Hardware Payment Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.hardwarePaymentCard,
+                    { backgroundColor: colors.primary + "15", borderColor: colors.primary }
+                  ]}
+                  onPress={handleHardwarePayment}
+                  disabled={processing}
+                >
+                  <View style={[styles.hardwareIcon, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.hardwareIconText}>🤖</Text>
+                  </View>
+                  <View style={styles.hardwareInfo}>
+                    <Text style={[styles.hardwareName, { color: colors.primary }]}>
+                      Bayar dari Alat Bisyaroh
+                    </Text>
+                    <Text style={[styles.hardwareDescription, { color: colors.gray700 }]}>
+                      Gunakan alat pembayaran fisik dengan RFID
+                    </Text>
+                    <Text style={[styles.hardwareDetails, { color: colors.gray600 }]}>
+                      Tap RFID → Masukkan uang → Otomatis terbayar
+                    </Text>
+                  </View>
+                  <View style={[styles.hardwareArrow, { backgroundColor: colors.primary }]}>
+                    <Text style={[styles.hardwareArrowText, { color: colors.white }]}>→</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <View style={[styles.dividerSection, { borderTopColor: colors.gray200 }]}>
+                  <Text style={[styles.dividerText, { color: colors.gray500 }]}>
+                    Atau pilih pembayaran digital:
+                  </Text>
+                </View>
 
               {paymentMethods.map((method) => (
                 <TouchableOpacity
@@ -446,6 +651,63 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                 </Text>
               </View>
             )}
+
+            {hardwarePayment && (
+              <View style={styles.hardwareProcessingSection}>
+                <View style={[styles.hardwareStatusCard, { backgroundColor: colors.primary + "10" }]}>
+                  {hardwareStatus === 'waiting' && (
+                    <>
+                      <Text style={styles.hardwareStatusIcon}>⏳</Text>
+                      <Text style={[styles.hardwareStatusTitle, { color: colors.primary }]}>
+                        Menunggu Konfirmasi
+                      </Text>
+                      <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
+                        Klik "Mulai" untuk memulai sesi pembayaran
+                      </Text>
+                    </>
+                  )}
+                  
+                  {hardwareStatus === 'scanning' && (
+                    <>
+                      <ActivityIndicator size="large" color={colors.primary} />
+                      <Text style={[styles.hardwareStatusTitle, { color: colors.primary }]}>
+                        Menunggu di Alat Bisyaroh
+                      </Text>
+                      <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
+                        Silakan pergi ke alat pembayaran dan tap RFID Anda
+                      </Text>
+                      <Text style={[styles.hardwareStatusSubtext, { color: colors.gray600 }]}>
+                        Sesi akan otomatis berakhir dalam 5 menit
+                      </Text>
+                    </>
+                  )}
+                  
+                  {hardwareStatus === 'processing' && (
+                    <>
+                      <ActivityIndicator size="large" color={colors.success} />
+                      <Text style={[styles.hardwareStatusTitle, { color: colors.success }]}>
+                        Memproses Pembayaran
+                      </Text>
+                      <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
+                        RFID terdeteksi, sedang memproses uang yang dimasukkan...
+                      </Text>
+                    </>
+                  )}
+                  
+                  {hardwareStatus === 'success' && (
+                    <>
+                      <Text style={styles.hardwareStatusIcon}>✅</Text>
+                      <Text style={[styles.hardwareStatusTitle, { color: colors.success }]}>
+                        Pembayaran Berhasil!
+                      </Text>
+                      <Text style={[styles.hardwareStatusText, { color: colors.gray700 }]}>
+                        Pembayaran telah diproses melalui alat Bisyaroh
+                      </Text>
+                    </>
+                  )}
+                </View>
+              </View>
+            )}
           </ScrollView>
 
           <View
@@ -456,7 +718,7 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
               onPress={handleClose}
               variant="outline"
               style={[styles.cancelButton, { borderColor: colors.gray400 }]}
-              disabled={processing}
+              disabled={processing || hardwarePayment}
             />
             
             {(amountAfterCredit || 0) === 0 ? (
@@ -464,7 +726,19 @@ const PaymentModal = ({ visible, payment, onClose, onPaymentSuccess, creditBalan
                 title="Gunakan Credit"
                 onPress={handlePayNow}
                 style={[styles.payButton, { backgroundColor: colors.green }]}
-                disabled={processing}
+                disabled={processing || hardwarePayment}
+              />
+            ) : hardwarePayment ? (
+              <Button
+                title={hardwareStatus === 'scanning' ? "Menunggu di Alat..." : "Proses Hardware"}
+                onPress={() => {}}
+                style={[
+                  styles.payButton,
+                  {
+                    backgroundColor: hardwareStatus === 'processing' ? colors.success : colors.primary,
+                  },
+                ]}
+                disabled={true}
               />
             ) : (
               <Button
@@ -705,6 +979,93 @@ const styles = StyleSheet.create({
   },
   payButton: {
     flex: 2,
+  },
+  hardwarePaymentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  hardwareIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 16,
+  },
+  hardwareIconText: {
+    fontSize: 24,
+  },
+  hardwareInfo: {
+    flex: 1,
+  },
+  hardwareName: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  hardwareDescription: {
+    fontSize: 14,
+    marginBottom: 2,
+    fontWeight: "500",
+  },
+  hardwareDetails: {
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  hardwareArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hardwareArrowText: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  dividerSection: {
+    borderTopWidth: 1,
+    paddingTop: 16,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  dividerText: {
+    fontSize: 14,
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
+  hardwareProcessingSection: {
+    paddingVertical: 20,
+  },
+  hardwareStatusCard: {
+    padding: 20,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  hardwareStatusIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  hardwareStatusTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  hardwareStatusText: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 8,
+    lineHeight: 20,
+  },
+  hardwareStatusSubtext: {
+    fontSize: 12,
+    textAlign: "center",
+    fontStyle: "italic",
   },
 });
 

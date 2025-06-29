@@ -2,11 +2,13 @@
 
 ## Overview
 
-This document details the two critical flows in the Smart Bisyaroh payment management system:
+This document details the critical flows in the Smart Bisyaroh payment management system:
 1. **RFID Pairing Flow** - Associating RFID cards with students
 2. **Payment Processing Flow** - RFID-based payment with currency detection
+3. **Hardware Payment Flow** - App-initiated payment through ESP32 device
+4. **Solenoid Control Flow** - Remote lock/unlock control for payment device
 
-Both flows integrate the React Native mobile app with ESP32 IoT hardware through Firebase.
+All flows integrate the React Native mobile app with ESP32 IoT hardware through Firebase.
 
 ---
 
@@ -883,6 +885,733 @@ Smart Bisyaroh Firebase Database
 #define BUTTON_OK 27
 ```
 
+---
+
+# Hardware Payment Flow
+
+## Overview
+
+The hardware payment flow enables users to initiate payment from the mobile app and then complete it at the ESP32 device. This requires app confirmation before hardware activation to ensure authorized payments.
+
+## Hardware Payment Flow Diagram
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Mobile App    │    │   Firebase      │    │   ESP32         │    │   RFID Card     │    │   Currency      │
+│   (Parent)      │    │   Firestore     │    │   Hardware      │    │                 │    │   (Cash Bill)   │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │                      │                      │
+          │ 1. Tap "Bayar dari   │                      │                      │                      │
+          │    Alat Bisyaroh"    │                      │                      │                      │
+          │                      │                      │                      │                      │
+          │ 2. Show Instruction  │                      │                      │                      │
+          │    Alert Dialog      │                      │                      │                      │
+          │                      │                      │                      │                      │
+          │ 3. Create Session    │                      │                      │                      │
+          ├─────────────────────▶│                      │                      │                      │
+          │   {userId, amount,   │                      │                      │                      │
+          │    status: waiting,  │                      │                      │                      │
+          │    expiryTime: +5m}  │                      │                      │                      │
+          │                      │                      │                      │                      │
+          │                      │ 4. ESP32 Monitors    │                      │                      │
+          │                      │    Payment Sessions  │                      │                      │
+          │                      ├─────────────────────▶│                      │                      │
+          │                      │    (polling)         │                      │                      │
+          │                      │                      │                      │                      │
+          │ 5. App Shows Status  │                      │ 6. LCD Shows         │                      │
+          │   "Menunggu di Alat  │                      │   "Pembayaran Aktif" │                      │
+          │    Bisyaroh"         │                      │   "Tap RFID Anda"    │                      │
+          │                      │                      │                      │                      │
+          │                      │                      │ 7. Validate RFID ◄──┤                      │
+          │                      │                      │    Match with        │                      │
+          │                      │                      │    session userId    │                      │
+          │                      │                      │                      │                      │
+          │                      │ 8. Update Session    │                      │                      │
+          │                      │ ◄────────────────────┤                      │                      │
+          │                      │   {status:           │                      │                      │
+          │                      │    rfid_detected}    │                      │                      │
+          │                      │                      │                      │                      │
+          │ 9. App Shows         │                      │ 10. LCD Shows        │                      │
+          │   "RFID Terdeteksi,  │                      │    "Masukkan Uang"   │                      │
+          │    Masukkan Uang"    │                      │    "Sesuai Nominal"  │                      │
+          │                      │                      │                      │                      │
+          │                      │                      │ 11. Currency         │                      │
+          │                      │                      │     Detection ◄──────┼──────────────────────┤
+          │                      │                      │     (TCS3200 + KNN)  │                      │
+          │                      │                      │                      │                      │
+          │                      │ 12. Complete Payment │                      │                      │
+          │                      │ ◄────────────────────┤                      │                      │
+          │                      │    {status:          │                      │                      │
+          │                      │     completed,       │                      │                      │
+          │                      │     detectedAmount}  │                      │                      │
+          │                      │                      │                      │                      │
+          │ 13. Success Alert    │                      │ 14. Hardware         │                      │
+          │    "Pembayaran       │                      │     Feedback         │                      │
+          │     Berhasil!"       │                      │     - LCD: "Lunas!"  │                      │
+          │                      │                      │     - LED Green      │                      │
+          │                      │                      │     - Buzzer Beep    │                      │
+          │                      │                      │     - Servo Action   │                      │
+```
+
+**Timeline**: Total process ~2-8 minutes (5-minute session timeout)
+
+## Hardware Payment Session Management
+
+### 1. Session Creation (Mobile App)
+
+**Location**: `components/ui/PaymentModal.jsx`
+
+```javascript
+const handleHardwarePayment = async () => {
+  setHardwarePayment(true);
+  setHardwareStatus('waiting');
+  
+  Alert.alert(
+    "Bayar dari Alat Bisyaroh 🤖",
+    "Silakan pergi ke alat pembayaran Bisyaroh dan:\n\n1. Tap kartu RFID Anda\n2. Masukkan uang sesuai nominal\n3. Tunggu konfirmasi pembayaran\n\nSesi ini akan aktif selama 5 menit.",
+    [
+      {
+        text: "Batal",
+        style: "cancel",
+        onPress: () => {
+          setHardwarePayment(false);
+          setHardwareStatus('waiting');
+        }
+      },
+      {
+        text: "Mulai",
+        onPress: async () => {
+          await startHardwarePaymentSession();
+        }
+      }
+    ]
+  );
+};
+```
+
+### 2. Session Data Structure
+
+**Location**: `services/hardwarePaymentService.js`
+
+```javascript
+// Firestore Collection: hardware_payment_sessions
+const sessionData = {
+  id: `${userId}_${Date.now()}`,
+  userId: userId,
+  timelineId: timelineId,
+  periodKey: periodKey,
+  amount: amount,
+  status: 'waiting', // waiting, rfid_detected, processing, completed, failed, expired
+  isActive: true,
+  startTime: new Date().toISOString(),
+  expiryTime: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes
+  rfidCode: '',
+  detectedAmount: 0,
+  completedAt: null,
+  errorMessage: '',
+  createdAt: new Date(),
+  updatedAt: new Date()
+};
+```
+
+### 3. ESP32 Session Monitoring
+
+**Expected Implementation** (ESP32 firmware):
+
+```cpp
+// Monitor active payment sessions
+void checkHardwarePaymentSessions() {
+  if (firestore->queryDocuments("hardware_payment_sessions", 
+      "isActive == true && status == 'waiting'")) {
+    
+    JsonDocument sessions = firestore->getQueryResult();
+    
+    for (auto& session : sessions["documents"].as<JsonArray>()) {
+      String sessionId = session["name"];
+      String userId = session["fields"]["userId"]["stringValue"];
+      int amount = session["fields"]["amount"]["integerValue"];
+      
+      // Display payment request on LCD
+      displayPaymentRequest(userId, amount);
+      
+      currentPaymentSession = sessionId;
+      paymentSessionActive = true;
+      break; // Handle one session at a time
+    }
+  }
+}
+
+// Handle RFID validation for payment session
+void validateSessionRFID(String rfidCode) {
+  if (!paymentSessionActive) return;
+  
+  // Get session data
+  JsonDocument session = firestore->getDocument(
+    "hardware_payment_sessions/" + currentPaymentSession
+  );
+  
+  String sessionUserId = session["fields"]["userId"]["stringValue"];
+  
+  // Validate RFID matches session user
+  if (validateUserRFID(rfidCode, sessionUserId)) {
+    // Update session status
+    JsonDocument updateDoc;
+    updateDoc["status"] = "rfid_detected";
+    updateDoc["rfidCode"] = rfidCode;
+    updateDoc["updatedAt"] = dateTimeNTP.getISO8601Time();
+    
+    firestore->updateDocument(
+      "hardware_payment_sessions/" + currentPaymentSession, 
+      updateDoc
+    );
+    
+    // Proceed to currency detection
+    enableCurrencyDetection();
+    lcd.print("Masukkan Uang");
+  } else {
+    displayError("RFID Tidak Sesuai");
+  }
+}
+```
+
+### 4. Real-time Status Updates
+
+**Location**: `components/ui/PaymentModal.jsx`
+
+```javascript
+const handleHardwareSessionUpdate = (sessionData) => {
+  if (!sessionData) {
+    setHardwareStatus('error');
+    return;
+  }
+
+  switch (sessionData.status) {
+    case 'waiting':
+      setHardwareStatus('scanning');
+      break;
+    case 'rfid_detected':
+      setHardwareStatus('processing');
+      break;
+    case 'processing':
+      setHardwareStatus('processing');
+      break;
+    case 'completed':
+      setHardwareStatus('success');
+      if (hardwareListener) {
+        hardwareListener();
+        setHardwareListener(null);
+      }
+      Alert.alert(
+        "Pembayaran Berhasil! 🎉",
+        `Pembayaran ${payment.periodData?.label} melalui alat Bisyaroh berhasil diproses.\n\nJumlah: ${formatCurrency(sessionData.detectedAmount || amountAfterCredit)}`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setHardwarePayment(false);
+              setHardwareStatus('waiting');
+              setHardwareSessionId(null);
+              onPaymentSuccess(payment, 'hardware_cash', sessionData.detectedAmount || amountAfterCredit);
+              onClose();
+            }
+          }
+        ]
+      );
+      break;
+    case 'failed':
+    case 'expired':
+      setHardwareStatus('error');
+      if (hardwareListener) {
+        hardwareListener();
+        setHardwareListener(null);
+      }
+      Alert.alert(
+        "Pembayaran Gagal",
+        sessionData.errorMessage || "Sesi pembayaran telah berakhir atau gagal",
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              setHardwarePayment(false);
+              setHardwareStatus('waiting');
+              setHardwareSessionId(null);
+            }
+          }
+        ]
+      );
+      break;
+  }
+};
+```
+
+### 5. Session Expiry Management
+
+**Location**: `services/hardwarePaymentService.js`
+
+```javascript
+export const listenToHardwarePaymentSession = (sessionId, callback) => {
+  const sessionRef = doc(db, HARDWARE_PAYMENT_COLLECTION, sessionId);
+  
+  const unsubscribe = onSnapshot(sessionRef, (doc) => {
+    if (doc.exists()) {
+      const sessionData = doc.data();
+      
+      // Check if session expired
+      const now = new Date();
+      const expiryTime = new Date(sessionData.expiryTime);
+      
+      if (now > expiryTime && sessionData.status !== 'completed') {
+        updateHardwarePaymentSession(sessionId, { 
+          status: 'expired', 
+          isActive: false,
+          errorMessage: 'Sesi pembayaran telah berakhir' 
+        });
+        callback({ ...sessionData, status: 'expired' });
+        return;
+      }
+      
+      callback(sessionData);
+    } else {
+      callback(null);
+    }
+  }, (error) => {
+    console.error('Error listening to hardware payment session:', error);
+    callback(null);
+  });
+
+  return unsubscribe;
+};
+```
+
+---
+
+# Solenoid Control Flow
+
+## Overview
+
+The solenoid control system allows administrators to remotely lock/unlock the physical payment device. This is essential for device security and maintenance access.
+
+## Solenoid Control Flow Diagram
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Admin App     │    │   Firebase      │    │   ESP32         │    │   Solenoid      │
+│   Dashboard     │    │   Firestore     │    │   Hardware      │    │   Lock/Motor    │
+└─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘    └─────────┬───────┘
+          │                      │                      │                      │
+          │ 1. Admin Tap         │                      │                      │
+          │   "Buka Alat"        │                      │                      │
+          │                      │                      │                      │
+          │ 2. Select Duration   │                      │                      │
+          │   • 30 detik         │                      │                      │
+          │   • 1 menit          │                      │                      │
+          │   • 5 menit          │                      │                      │
+          │   • Emergency        │                      │                      │
+          │                      │                      │                      │
+          │ 3. Send Command      │                      │                      │
+          ├─────────────────────▶│                      │                      │
+          │   {command: unlock,  │                      │                      │
+          │    duration: 30,     │                      │                      │
+          │    adminId: admin,   │                      │                      │
+          │    timestamp: now}   │                      │                      │
+          │                      │                      │                      │
+          │                      │ 4. ESP32 Monitors    │                      │
+          │                      │    Commands          │                      │
+          │                      ├─────────────────────▶│                      │
+          │                      │    (polling every    │                      │
+          │                      │     2 seconds)       │                      │
+          │                      │                      │                      │
+          │ 5. Show Loading      │                      │ 6. Process Command   │
+          │   "Mengirim Perintah │                      │   Validate & Execute │                      │
+          │    ke ESP32..."      │                      │                      │                      │
+          │                      │                      │                      │                      │
+          │                      │ 7. Update Status     │                      │ 8. Unlock Solenoid  │
+          │                      │ ◄────────────────────┤                      ├─────────────────────▶│
+          │                      │   {status: executed, │                      │   digitalWrite(HIGH) │
+          │                      │    executedAt: now,  │                      │                      │
+          │                      │    deviceResponse}   │                      │                      │
+          │                      │                      │                      │                      │
+          │                      │ 8. Update Device     │                      │ 9. LCD Shows         │
+          │                      │    Status            │                      │   "Alat Terbuka"     │
+          │                      │ ◄────────────────────┤                      │   "Tutup Otomatis    │
+          │                      │   {solenoidStatus:   │                      │    dalam 30s"        │
+          │                      │    unlocked,         │                      │                      │
+          │                      │    lastUpdate: now}  │                      │                      │
+          │                      │                      │                      │                      │
+          │ 9. Success Toast     │                      │ 10. Start Timer      │ 11. Auto Lock        │
+          │   "Perintah buka     │                      │     for Auto Lock    │     After Duration   │
+          │    alat terkirim"    │                      │     (30 seconds)     ├─────────────────────▶│
+          │                      │                      │                      │   digitalWrite(LOW)  │
+          │                      │                      │                      │                      │
+          │ 10. Real-time        │                      │ 12. Update Status    │                      │
+          │     Status Update    │                      │     to Locked        │                      │
+          │     Battery: 85%     │                      ├─────────────────────▶│                      │
+          │     Status: Unlocked │                      │                      │                      │
+          │     Online: ✅       │                      │                      │                      │
+```
+
+**Timeline**: Command execution ~2-5 seconds, Auto-lock after specified duration
+
+## Solenoid Control Implementation
+
+### 1. Admin Control Panel
+
+**Location**: `app/(admin)/index.jsx`
+
+```javascript
+const handleUnlockWithDuration = () => {
+  Alert.alert(
+    "Buka Alat Pembayaran",
+    "Pilih durasi untuk membuka alat:",
+    [
+      { text: "Batal", style: "cancel" },
+      { text: "30 detik", onPress: () => handleUnlockSolenoid(30) },
+      { text: "1 menit", onPress: () => handleUnlockSolenoid(60) },
+      { text: "5 menit", onPress: () => handleUnlockSolenoid(300) },
+      { text: "Emergency", style: "destructive", onPress: handleEmergencyUnlock }
+    ]
+  );
+};
+
+const handleUnlockSolenoid = async (duration = 30) => {
+  setSolenoidLoading(true);
+  
+  try {
+    const result = await unlockSolenoid(duration);
+    
+    if (result.success) {
+      showGeneralNotification(
+        "Perintah Terkirim",
+        `Perintah buka alat (${duration}s) telah dikirim ke ESP32`,
+        "success",
+        { duration: 3000 }
+      );
+    } else {
+      showGeneralNotification(
+        "Gagal Mengirim Perintah",
+        result.error || "Gagal mengirim perintah buka alat",
+        "error"
+      );
+    }
+  } catch (error) {
+    showGeneralNotification(
+      "Error",
+      "Terjadi kesalahan saat mengirim perintah",
+      "error"
+    );
+  } finally {
+    setSolenoidLoading(false);
+  }
+};
+```
+
+### 2. Solenoid Command Structure
+
+**Location**: `services/solenoidControlService.js`
+
+```javascript
+// Firestore Collection: solenoid_control
+export const unlockSolenoid = async (duration = 30) => {
+  try {
+    const commandData = {
+      command: 'unlock',
+      duration: duration, // Duration in seconds
+      timestamp: new Date().toISOString(),
+      status: 'pending', // pending, executed, failed
+      adminId: 'admin', // Could be dynamic based on current admin
+      deviceResponse: '',
+      executedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const commandRef = doc(db, SOLENOID_CONTROL_COLLECTION, `unlock_${Date.now()}`);
+    await setDoc(commandRef, commandData);
+
+    return { success: true, commandId: commandRef.id };
+  } catch (error) {
+    console.error('Error sending unlock command:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const lockSolenoid = async () => {
+  try {
+    const commandData = {
+      command: 'lock',
+      timestamp: new Date().toISOString(),
+      status: 'pending',
+      adminId: 'admin',
+      deviceResponse: '',
+      executedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const commandRef = doc(db, SOLENOID_CONTROL_COLLECTION, `lock_${Date.now()}`);
+    await setDoc(commandRef, commandData);
+
+    return { success: true, commandId: commandRef.id };
+  } catch (error) {
+    console.error('Error sending lock command:', error);
+    return { success: false, error: error.message };
+  }
+};
+```
+
+### 3. ESP32 Command Processing
+
+**Expected Implementation** (ESP32 firmware):
+
+```cpp
+// Monitor solenoid commands
+void checkSolenoidCommands() {
+  if (firestore->queryDocuments("solenoid_control", 
+      "status == 'pending' && ORDER BY timestamp DESC LIMIT 1")) {
+    
+    JsonDocument commands = firestore->getQueryResult();
+    
+    if (commands["documents"].size() > 0) {
+      auto command = commands["documents"][0];
+      String commandId = command["name"];
+      String commandType = command["fields"]["command"]["stringValue"];
+      int duration = command["fields"]["duration"]["integerValue"];
+      
+      if (commandType == "unlock") {
+        executeSolenoidUnlock(duration, commandId);
+      } else if (commandType == "lock") {
+        executeSolenoidLock(commandId);
+      } else if (commandType == "emergency_unlock") {
+        executeEmergencyUnlock(commandId);
+      }
+    }
+  }
+}
+
+void executeSolenoidUnlock(int duration, String commandId) {
+  // Activate solenoid (unlock)
+  digitalWrite(SOLENOID_PIN, HIGH);
+  currentSolenoidStatus = "unlocked";
+  
+  // Update command status
+  JsonDocument updateDoc;
+  updateDoc["status"] = "executed";
+  updateDoc["executedAt"] = dateTimeNTP.getISO8601Time();
+  updateDoc["deviceResponse"] = "Solenoid unlocked for " + String(duration) + " seconds";
+  
+  firestore->updateDocument("solenoid_control/" + commandId, updateDoc);
+  
+  // Update device status
+  updateSolenoidDeviceStatus();
+  
+  // LCD feedback
+  lcd.clear();
+  lcd.print("Alat Terbuka");
+  lcd.setCursor(0, 1);
+  lcd.print("Tutup: " + String(duration) + "s");
+  
+  // Schedule auto-lock
+  scheduleSolenoidLock(duration * 1000); // Convert to milliseconds
+}
+
+void executeSolenoidLock(String commandId) {
+  // Deactivate solenoid (lock)
+  digitalWrite(SOLENOID_PIN, LOW);
+  currentSolenoidStatus = "locked";
+  
+  // Update command status
+  JsonDocument updateDoc;
+  updateDoc["status"] = "executed";
+  updateDoc["executedAt"] = dateTimeNTP.getISO8601Time();
+  updateDoc["deviceResponse"] = "Solenoid locked";
+  
+  firestore->updateDocument("solenoid_control/" + commandId, updateDoc);
+  
+  // Update device status
+  updateSolenoidDeviceStatus();
+  
+  // LCD feedback
+  lcd.clear();
+  lcd.print("Alat Terkunci");
+  lcd.setCursor(0, 1);
+  lcd.print("Remote Command");
+}
+```
+
+### 4. Real-time Status Monitoring
+
+**Location**: `app/(admin)/index.jsx`
+
+```javascript
+const [solenoidStatus, setSolenoidStatus] = useState({
+  status: 'unknown', // locked, unlocked, unknown
+  deviceOnline: false,
+  lastUpdate: null,
+  batteryLevel: 0
+});
+
+useEffect(() => {
+  loadSolenoidStatus();
+  
+  // Listen to real-time solenoid status
+  const unsubscribe = listenToSolenoidStatus((statusData) => {
+    setSolenoidStatus(statusData);
+  });
+
+  return () => {
+    if (unsubscribe) unsubscribe();
+  };
+}, []);
+
+// UI Display
+<View style={styles.solenoidStatusRow}>
+  <View style={[
+    styles.statusIndicator,
+    { 
+      backgroundColor: solenoidStatus.deviceOnline 
+        ? colors.success 
+        : colors.error 
+    }
+  ]} />
+  <Text style={[styles.statusText, { color: colors.gray600 }]}>
+    {solenoidStatus.deviceOnline ? 'Online' : 'Offline'} • 
+    Status: {solenoidStatus.status === 'locked' ? 'Terkunci' : 
+             solenoidStatus.status === 'unlocked' ? 'Terbuka' : 'Unknown'}
+  </Text>
+</View>
+
+<View style={[styles.batteryIndicator, { borderColor: colors.gray300 }]}>
+  <View 
+    style={[
+      styles.batteryFill,
+      { 
+        width: `${solenoidStatus.batteryLevel}%`,
+        backgroundColor: solenoidStatus.batteryLevel > 50 
+          ? colors.success 
+          : solenoidStatus.batteryLevel > 20 
+          ? colors.warning 
+          : colors.error
+      }
+    ]} 
+  />
+  <Text style={[styles.batteryText, { color: colors.gray700 }]}>
+    {solenoidStatus.batteryLevel}%
+  </Text>
+</View>
+```
+
+### 5. Emergency Controls
+
+**Location**: `services/solenoidControlService.js`
+
+```javascript
+export const emergencyUnlock = async () => {
+  try {
+    const commandData = {
+      command: 'emergency_unlock',
+      timestamp: new Date().toISOString(),
+      status: 'pending',
+      adminId: 'admin',
+      priority: 'high',
+      deviceResponse: '',
+      executedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    const commandRef = doc(db, SOLENOID_CONTROL_COLLECTION, `emergency_${Date.now()}`);
+    await setDoc(commandRef, commandData);
+
+    return { success: true, commandId: commandRef.id };
+  } catch (error) {
+    console.error('Error sending emergency unlock command:', error);
+    return { success: false, error: error.message };
+  }
+};
+```
+
+## Device Status Structure
+
+```javascript
+// Firestore Document: solenoid_control/device_status
+{
+  solenoidStatus: 'locked', // locked, unlocked, unknown
+  deviceOnline: true,
+  lastUpdate: '2024-01-15T10:30:00Z',
+  batteryLevel: 85,
+  temperature: 28,
+  humidity: 65,
+  wifiSignal: -45,
+  firmwareVersion: 'v1.2.0',
+  uptimeSeconds: 3600,
+  totalCommands: 245,
+  lastCommand: 'unlock_1705318200000',
+  errors: []
+}
+```
+
+## Security Features
+
+### Command Authentication
+- Admin-only access to solenoid controls
+- Command timestamping and audit trail
+- Device response validation
+
+### Safety Mechanisms
+- Auto-lock after specified duration
+- Emergency unlock for critical situations
+- Battery level monitoring for maintenance
+- Offline device detection
+
+### Error Handling
+- Network failure: Commands queued until reconnect
+- Device offline: Clear status indication
+- Invalid commands: Error logging and notification
+- Battery low: Warning alerts
+
+## Firebase Collections Summary
+
+```
+Smart Bisyaroh Firebase (Extended)
+├── 📁 solenoid_control/
+│   ├── 📄 unlock_{timestamp}/
+│   │   ├── command: "unlock"
+│   │   ├── duration: 30
+│   │   ├── status: "executed"
+│   │   ├── adminId: "admin"
+│   │   ├── executedAt: Date
+│   │   └── deviceResponse: "Success"
+│   │
+│   ├── 📄 device_status/
+│   │   ├── solenoidStatus: "locked"
+│   │   ├── deviceOnline: true
+│   │   ├── batteryLevel: 85
+│   │   ├── lastUpdate: Date
+│   │   └── ...
+│   │
+│   └── 📄 lock_{timestamp}/
+│       ├── command: "lock"
+│       ├── status: "executed"
+│       └── ...
+│
+├── 📁 hardware_payment_sessions/
+│   └── 📄 {userId}_{timestamp}/
+│       ├── userId: "user123"
+│       ├── amount: 5000
+│       ├── status: "waiting"
+│       ├── isActive: true
+│       ├── expiryTime: Date
+│       ├── rfidCode: ""
+│       ├── detectedAmount: 0
+│       └── ...
+│
+└── 📁 [existing collections]
+    ├── users/
+    ├── payments/
+    ├── active_timeline/
+    └── rfid_pairing/
+```
+
 ## Future Enhancements
 
 1. **NFC Support**: Alternative to RFID
@@ -893,3 +1622,7 @@ Smart Bisyaroh Firebase Database
 6. **Voice feedback**: Audio confirmations
 7. **Batch operations**: Multiple student payments
 8. **Analytics dashboard**: Payment insights
+9. **Scheduled Commands**: Automated lock/unlock timing
+10. **Multi-device Control**: Multiple ESP32 devices management
+11. **Advanced Security**: Encrypted commands, certificate authentication
+12. **Mobile Alerts**: Push notifications for device status changes

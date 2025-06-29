@@ -20,6 +20,13 @@ import { getThemeByRole } from "../../constants/Colors";
 import Button from "../../components/ui/Button";
 import { signOutUser } from "../../services/authService";
 import { seederService } from "../../services/seederService";
+import { 
+  unlockSolenoid, 
+  lockSolenoid, 
+  getSolenoidStatus,
+  listenToSolenoidStatus,
+  emergencyUnlock 
+} from "../../services/solenoidControlService";
 
 function AdminHome() {
   const { currentUser, userProfile, isAdmin } = useAuth();
@@ -38,9 +45,26 @@ function AdminHome() {
     highestUserNumber: 0,
     nextUserNumber: 1,
   });
+  const [solenoidStatus, setSolenoidStatus] = useState({
+    status: 'unknown', // locked, unlocked, unknown
+    deviceOnline: false,
+    lastUpdate: null,
+    batteryLevel: 0
+  });
+  const [solenoidLoading, setSolenoidLoading] = useState(false);
 
   useEffect(() => {
     loadSeederStats();
+    loadSolenoidStatus();
+    
+    // Listen to real-time solenoid status
+    const unsubscribe = listenToSolenoidStatus((statusData) => {
+      setSolenoidStatus(statusData);
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const loadSeederStats = async () => {
@@ -57,13 +81,29 @@ function AdminHome() {
     }
   };
 
+  const loadSolenoidStatus = async () => {
+    try {
+      const result = await getSolenoidStatus();
+      if (result.success) {
+        setSolenoidStatus({
+          status: result.status,
+          deviceOnline: result.deviceOnline,
+          lastUpdate: result.lastUpdate,
+          batteryLevel: result.batteryLevel
+        });
+      }
+    } catch (error) {
+      console.error("Error loading solenoid status:", error);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await loadSeederStats();
+      await Promise.all([loadSeederStats(), loadSolenoidStatus()]);
       showGeneralNotification(
         "Data Diperbarui",
-        "Statistik seeder berhasil dimuat ulang",
+        "Data berhasil dimuat ulang",
         "success",
         { duration: 2000 }
       );
@@ -201,6 +241,124 @@ function AdminHome() {
     router.push("/(admin)/payment-status");
   };
 
+  const handleUnlockSolenoid = async (duration = 30) => {
+    setSolenoidLoading(true);
+    
+    try {
+      const result = await unlockSolenoid(duration);
+      
+      if (result.success) {
+        showGeneralNotification(
+          "Perintah Terkirim",
+          `Perintah buka alat (${duration}s) telah dikirim ke ESP32`,
+          "success",
+          { duration: 3000 }
+        );
+      } else {
+        showGeneralNotification(
+          "Gagal Mengirim Perintah",
+          result.error || "Gagal mengirim perintah buka alat",
+          "error"
+        );
+      }
+    } catch (error) {
+      showGeneralNotification(
+        "Error",
+        "Terjadi kesalahan saat mengirim perintah",
+        "error"
+      );
+    } finally {
+      setSolenoidLoading(false);
+    }
+  };
+
+  const handleLockSolenoid = async () => {
+    setSolenoidLoading(true);
+    
+    try {
+      const result = await lockSolenoid();
+      
+      if (result.success) {
+        showGeneralNotification(
+          "Perintah Terkirim",
+          "Perintah tutup alat telah dikirim ke ESP32",
+          "success",
+          { duration: 3000 }
+        );
+      } else {
+        showGeneralNotification(
+          "Gagal Mengirim Perintah",
+          result.error || "Gagal mengirim perintah tutup alat",
+          "error"
+        );
+      }
+    } catch (error) {
+      showGeneralNotification(
+        "Error",
+        "Terjadi kesalahan saat mengirim perintah",
+        "error"
+      );
+    } finally {
+      setSolenoidLoading(false);
+    }
+  };
+
+  const handleEmergencyUnlock = async () => {
+    Alert.alert(
+      "Emergency Unlock",
+      "Apakah Anda yakin ingin membuka alat secara darurat? Ini akan langsung membuka solenoid tanpa batasan waktu.",
+      [
+        { text: "Batal", style: "cancel" },
+        {
+          text: "Emergency Unlock",
+          style: "destructive",
+          onPress: async () => {
+            setSolenoidLoading(true);
+            try {
+              const result = await emergencyUnlock();
+              if (result.success) {
+                showGeneralNotification(
+                  "Emergency Unlock",
+                  "Perintah emergency unlock telah dikirim!",
+                  "warning",
+                  { duration: 5000 }
+                );
+              } else {
+                showGeneralNotification(
+                  "Gagal Emergency Unlock",
+                  result.error,
+                  "error"
+                );
+              }
+            } catch (error) {
+              showGeneralNotification(
+                "Error",
+                "Terjadi kesalahan saat emergency unlock",
+                "error"
+              );
+            } finally {
+              setSolenoidLoading(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleUnlockWithDuration = () => {
+    Alert.alert(
+      "Buka Alat Pembayaran",
+      "Pilih durasi untuk membuka alat:",
+      [
+        { text: "Batal", style: "cancel" },
+        { text: "30 detik", onPress: () => handleUnlockSolenoid(30) },
+        { text: "1 menit", onPress: () => handleUnlockSolenoid(60) },
+        { text: "5 menit", onPress: () => handleUnlockSolenoid(300) },
+        { text: "Emergency", style: "destructive", onPress: handleEmergencyUnlock }
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.gray50 }]}>
       <ScrollView
@@ -229,6 +387,106 @@ function AdminHome() {
               Selamat datang, {userProfile.nama}
             </Text>
           )}
+        </View>
+
+        <View style={styles.solenoidSection}>
+          <View style={[styles.solenoidCard, { backgroundColor: colors.white }]}>
+            <View style={styles.solenoidHeader}>
+              <View style={styles.solenoidTitleSection}>
+                <Text style={[styles.solenoidTitle, { color: colors.gray900 }]}>Kontrol Alat Pembayaran</Text>
+                <View style={styles.solenoidStatusRow}>
+                  <View style={[
+                    styles.statusIndicator,
+                    { 
+                      backgroundColor: solenoidStatus.deviceOnline 
+                        ? colors.success 
+                        : colors.error 
+                    }
+                  ]} />
+                  <Text style={[styles.statusText, { color: colors.gray600 }]}>
+                    {solenoidStatus.deviceOnline ? 'Online' : 'Offline'} • 
+                    Status: {solenoidStatus.status === 'locked' ? 'Terkunci' : 
+                             solenoidStatus.status === 'unlocked' ? 'Terbuka' : 'Unknown'}
+                  </Text>
+                </View>
+                {solenoidStatus.lastUpdate && (
+                  <Text style={[styles.lastUpdateText, { color: colors.gray500 }]}>
+                    Update: {new Date(solenoidStatus.lastUpdate).toLocaleString('id-ID')}
+                  </Text>
+                )}
+              </View>
+              <View style={[styles.batteryIndicator, { borderColor: colors.gray300 }]}>
+                <View 
+                  style={[
+                    styles.batteryFill,
+                    { 
+                      width: `${solenoidStatus.batteryLevel}%`,
+                      backgroundColor: solenoidStatus.batteryLevel > 50 
+                        ? colors.success 
+                        : solenoidStatus.batteryLevel > 20 
+                        ? colors.warning 
+                        : colors.error
+                    }
+                  ]} 
+                />
+                <Text style={[styles.batteryText, { color: colors.gray700 }]}>
+                  {solenoidStatus.batteryLevel}%
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.solenoidControls}>
+              <TouchableOpacity
+                style={[
+                  styles.solenoidButton,
+                  styles.unlockButton,
+                  { backgroundColor: colors.success },
+                  solenoidLoading && { opacity: 0.7 }
+                ]}
+                onPress={handleUnlockWithDuration}
+                disabled={solenoidLoading || !solenoidStatus.deviceOnline}
+                activeOpacity={0.8}
+              >
+                {solenoidLoading ? (
+                  <ActivityIndicator size={20} color={colors.white} />
+                ) : (
+                  <Text style={styles.solenoidButtonIcon}>🔓</Text>
+                )}
+                <Text style={[styles.solenoidButtonText, { color: colors.white }]}>
+                  Buka Alat
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.solenoidButton,
+                  styles.lockButton,
+                  { backgroundColor: colors.error },
+                  solenoidLoading && { opacity: 0.7 }
+                ]}
+                onPress={handleLockSolenoid}
+                disabled={solenoidLoading || !solenoidStatus.deviceOnline}
+                activeOpacity={0.8}
+              >
+                {solenoidLoading ? (
+                  <ActivityIndicator size={20} color={colors.white} />
+                ) : (
+                  <Text style={styles.solenoidButtonIcon}>🔒</Text>
+                )}
+                <Text style={[styles.solenoidButtonText, { color: colors.white }]}>
+                  Tutup Alat
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {!solenoidStatus.deviceOnline && (
+              <View style={[styles.offlineWarning, { backgroundColor: colors.warning + '15' }]}>
+                <Text style={[styles.offlineWarningText, { color: colors.warning }]}>
+                  ⚠️ ESP32 sedang offline. Perintah tidak dapat dikirim.
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={styles.menuSection}>
@@ -717,6 +975,110 @@ const styles = StyleSheet.create({
     color: "#059669",
     textAlign: "center",
     fontWeight: "600",
+  },
+  solenoidSection: {
+    marginBottom: 24,
+  },
+  solenoidCard: {
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  solenoidHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20,
+  },
+  solenoidTitleSection: {
+    flex: 1,
+  },
+  solenoidTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  solenoidStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  lastUpdateText: {
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  batteryIndicator: {
+    width: 60,
+    height: 24,
+    borderWidth: 1,
+    borderRadius: 4,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  batteryFill: {
+    position: "absolute",
+    left: 1,
+    top: 1,
+    bottom: 1,
+    borderRadius: 2,
+  },
+  batteryText: {
+    fontSize: 10,
+    fontWeight: "600",
+    zIndex: 1,
+  },
+  solenoidControls: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  solenoidButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  unlockButton: {
+    // backgroundColor set dynamically
+  },
+  lockButton: {
+    // backgroundColor set dynamically
+  },
+  solenoidButtonIcon: {
+    fontSize: 20,
+  },
+  solenoidButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  offlineWarning: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  offlineWarningText: {
+    fontSize: 14,
+    fontWeight: "500",
+    textAlign: "center",
   },
 });
 
