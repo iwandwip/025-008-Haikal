@@ -436,49 +436,11 @@ const migrateToTimelineSystem = async () => {
 
 ## 3.4 Planning & Future Development
 
-### **🚀 v1.3.0 - AI & Analytics Enhancement (Planned 2025-Q1)**
+### **🚀 Future Development Planning**
 
-#### 🧠 **Advanced Machine Learning Features**
-- **Enhanced KNN Algorithm**: Improved currency recognition dengan larger training dataset
-- **Adaptive Learning**: Self-improving accuracy berdasarkan usage patterns
-- **Multi-Currency Support**: Expansion beyond IDR untuk international usage
-- **Fraud Detection**: ML-based anomaly detection untuk suspicious transactions
+**Coming Soon...**
 
-#### 📊 **Advanced Analytics & Reporting**
-- **Payment Analytics Dashboard**: Comprehensive insights untuk admin
-- **Student Performance Metrics**: Payment behavior analysis
-- **Financial Forecasting**: Predictive analytics untuk revenue planning
-- **Export Capabilities**: PDF/Excel reports untuk accounting
-
-#### 🔧 **System Enhancements**
-- **Multi-Device Support**: Support untuk multiple ESP32 units
-- **Advanced Security**: End-to-end encryption untuk hardware communication
-- **Offline Capability**: Local processing dengan periodic synchronization
-- **Voice Feedback**: Audio confirmations dalam Bahasa Indonesia
-
-#### 🌐 **Integration Features**
-- **Payment Gateway Integration**: Online payment processing
-- **SMS Notifications**: Automated payment reminders
-- **WhatsApp Integration**: Payment confirmations and updates
-- **API for Third-party**: RESTful API untuk external integrations
-
----
-
-### **🔮 Long-term Roadmap (v2.0.0+)**
-
-#### **🌟 Next-Generation Features**
-- **Blockchain Integration**: Immutable payment records
-- **NFC Support**: Modern contactless payment methods
-- **Mobile Payment Integration**: E-wallet and digital payment support
-- **AI-Powered Insights**: Advanced predictive analytics
-- **Multi-Institution Support**: Franchise and multi-school deployment
-- **Real-time Video Monitoring**: Security cameras dengan AI detection
-
-#### **🏗️ Architecture Evolution**
-- **Microservices Architecture**: Scalable cloud-native deployment
-- **Edge Computing**: Local AI processing pada ESP32
-- **5G Integration**: Ultra-low latency communication
-- **IoT Fleet Management**: Centralized hardware monitoring
+*Planning dan roadmap untuk pengembangan selanjutnya sedang disusun dan akan diperbarui dalam rilis mendatang.*
 
 ---
 
