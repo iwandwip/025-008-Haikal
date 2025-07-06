@@ -12,8 +12,9 @@ import {
   Dimensions
 } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
+import { getThemeByRole } from '../../constants/Colors';
 import { digitalPaymentService } from '../../services/digitalPaymentService';
 import { midtransService } from '../../services/midtransService';
 import { callbackHandler } from '../../services/callbackHandler';
@@ -46,11 +47,11 @@ const DigitalPaymentModal = ({
   onPaymentSuccess,
   onPaymentError
 }) => {
-  const { colors } = useTheme();
+  const { isAdmin } = useAuth();
+  const colors = getThemeByRole(isAdmin);
   const { 
-    showSuccessNotification, 
-    showErrorNotification,
-    showLoadingNotification 
+    showGeneralNotification, 
+    showErrorNotification
   } = useNotification();
 
   // State management
@@ -179,9 +180,10 @@ const DigitalPaymentModal = ({
       setPaymentResult(callbackResult);
       setStep('payment_result');
       
-      showSuccessNotification(
+      showGeneralNotification(
         'Pembayaran Berhasil!',
-        `Pembayaran sebesar ${formatCurrency(getFinalAmount())} telah berhasil diproses.`
+        `Pembayaran sebesar ${formatCurrency(getFinalAmount())} telah berhasil diproses.`,
+        'success'
       );
 
       if (onPaymentSuccess) {

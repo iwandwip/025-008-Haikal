@@ -24,6 +24,11 @@ export const lightTheme = {
   
   border: '#e5e7eb',
   
+  // Text colors
+  text: '#111827',
+  textSecondary: '#6b7280',
+  surface: '#f9fafb',
+  
   shadow: {
     color: '#000000',
   },
@@ -57,6 +62,11 @@ export const adminTheme = {
   error: '#ef4444',
   
   border: '#e5e7eb',
+  
+  // Text colors
+  text: '#111827',
+  textSecondary: '#6b7280',
+  surface: '#f9fafb',
   
   shadow: {
     color: '#000000',
@@ -92,6 +102,11 @@ export const waliTheme = {
   
   border: '#e5e7eb',
   
+  // Text colors
+  text: '#111827',
+  textSecondary: '#6b7280',
+  surface: '#f9fafb',
+  
   shadow: {
     color: '#000000',
   },
@@ -121,6 +136,11 @@ export const darkTheme = {
   error: '#dc2626',
   
   border: '#4b5563',
+  
+  // Text colors
+  text: '#ffffff',
+  textSecondary: '#9ca3af',
+  surface: '#374151',
   
   shadow: {
     color: '#000000',

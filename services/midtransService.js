@@ -13,10 +13,16 @@ import Constants from 'expo-constants';
 
 class MidtransService {
   constructor() {
-    this.environment = Constants.expoConfig?.extra?.midtrans?.environment || 'sandbox';
+    // Get environment from config or env variables
+    this.environment = Constants.expoConfig?.extra?.midtrans?.environment || 
+                      process.env.EXPO_PUBLIC_MIDTRANS_ENVIRONMENT || 'sandbox';
+    
+    // Get client key from config or env variables
     this.clientKey = this.environment === 'sandbox' 
-      ? Constants.expoConfig?.extra?.midtrans?.clientKeySandbox
-      : Constants.expoConfig?.extra?.midtrans?.clientKeyProduction;
+      ? (Constants.expoConfig?.extra?.midtrans?.clientKeySandbox || 
+         process.env.EXPO_PUBLIC_MIDTRANS_CLIENT_KEY_SANDBOX)
+      : (Constants.expoConfig?.extra?.midtrans?.clientKeyProduction || 
+         process.env.EXPO_PUBLIC_MIDTRANS_CLIENT_KEY_PRODUCTION);
     
     this.snapUrl = this.environment === 'sandbox'
       ? 'https://app.sandbox.midtrans.com/snap/snap.js'
@@ -27,6 +33,7 @@ class MidtransService {
       : 'https://app.midtrans.com/snap/v1/transactions';
 
     console.log(`Midtrans initialized in ${this.environment} mode`);
+    console.log(`Client key available: ${!!this.clientKey}`);
   }
 
   /**

@@ -39,7 +39,8 @@ function StatusPembayaran() {
     showPaymentSuccessNotification, 
     showErrorNotification,
     showPaymentWithCreditNotification,
-    showCreditBalanceNotification
+    showCreditBalanceNotification,
+    showGeneralNotification
   } = useNotification();
   const colors = getThemeByRole(isAdmin);
   const insets = useSafeAreaInsets();
@@ -274,9 +275,10 @@ function StatusPembayaran() {
       // Clear cache
       paymentStatusManager.clearUserCache(userProfile.id);
       
-      showSuccessNotification(
+      showGeneralNotification(
         'Pembayaran Digital Berhasil!',
-        'Pembayaran Anda telah berhasil diproses.'
+        'Pembayaran Anda telah berhasil diproses.',
+        'success'
       );
       
     } catch (error) {
@@ -285,7 +287,7 @@ function StatusPembayaran() {
     } finally {
       setUpdatingPayment(false);
     }
-  }, [userProfile?.id, loadData, showSuccessNotification, showErrorNotification]);
+  }, [userProfile?.id, loadData, showGeneralNotification, showErrorNotification]);
 
   const handleDigitalPaymentError = useCallback((error) => {
     console.error('Digital payment error:', error);

@@ -97,3 +97,26 @@ export const toISOString = (dateInput = new Date()) => {
     return new Date().toISOString();
   }
 };
+
+/**
+ * Format currency to Indonesian Rupiah
+ * @param {number} amount - Amount to format
+ * @returns {string} Formatted currency string
+ */
+export const formatCurrency = (amount) => {
+  if (amount === null || amount === undefined || isNaN(amount)) {
+    return "Rp 0";
+  }
+  
+  try {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch (error) {
+    console.warn("Error formatting currency:", amount, error);
+    return `Rp ${amount.toLocaleString('id-ID')}`;
+  }
+};
