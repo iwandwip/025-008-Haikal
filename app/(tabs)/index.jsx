@@ -18,6 +18,7 @@ import { useSettings } from "../../contexts/SettingsContext";
 import { useNotification } from "../../contexts/NotificationContext";
 import { getColors, getThemeByRole } from "../../constants/Colors";
 import PaymentModal from "../../components/ui/PaymentModal";
+import DigitalPaymentModal from "../../components/ui/DigitalPaymentModal";
 import CreditBalance from "../../components/ui/CreditBalance";
 import { formatDate } from "../../utils/dateUtils";
 import { paymentStatusManager } from "../../services/paymentStatusManager";
@@ -28,6 +29,8 @@ import {
   getCreditBalance,
   processPaymentWithCredit,
 } from "../../services/waliPaymentService";
+import { digitalPaymentService } from "../../services/digitalPaymentService";
+import { paymentMethodManager } from "../../services/paymentMethodManager";
 
 function StatusPembayaran() {
   const { userProfile, isAdmin } = useAuth();
@@ -46,9 +49,11 @@ function StatusPembayaran() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [digitalPaymentModalVisible, setDigitalPaymentModalVisible] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
   const [creditBalance, setCreditBalance] = useState(0);
+  const [isDigitalPaymentEnabled, setIsDigitalPaymentEnabled] = useState(false);
 
   const loadData = useCallback(
     async (isRefresh = false, useCache = true) => {
@@ -114,6 +119,16 @@ function StatusPembayaran() {
     }
   }, [loadData, settingsLoading]);
 
+  // Check digital payment availability
+  useEffect(() => {
+    const checkDigitalPayment = () => {
+      const isEnabled = digitalPaymentService.isDigitalPaymentEnabled();
+      setIsDigitalPaymentEnabled(isEnabled);
+    };
+    
+    checkDigitalPayment();
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       paymentStatusManager.handlePageNavigation(
@@ -152,6 +167,11 @@ function StatusPembayaran() {
   const handlePayNow = useCallback((payment) => {
     setSelectedPayment(payment);
     setPaymentModalVisible(true);
+  }, []);
+
+  const handleDigitalPayment = useCallback((payment = null) => {
+    setSelectedPayment(payment);
+    setDigitalPaymentModalVisible(true);
   }, []);
 
   const handlePaymentSuccess = useCallback(
@@ -233,6 +253,49 @@ function StatusPembayaran() {
       showErrorNotification,
     ]
   );
+
+  const handleDigitalPaymentSuccess = useCallback(async (result) => {
+    try {
+      setUpdatingPayment(true);
+      
+      // Reload data untuk refresh payment status
+      await loadData(true, false);
+      
+      // Update credit balance
+      const creditResult = await getCreditBalance(userProfile.id);
+      if (creditResult.success) {
+        setCreditBalance(creditResult.creditBalance);
+      }
+      
+      // Close modal
+      setDigitalPaymentModalVisible(false);
+      setSelectedPayment(null);
+      
+      // Clear cache
+      paymentStatusManager.clearUserCache(userProfile.id);
+      
+      showSuccessNotification(
+        'Pembayaran Digital Berhasil!',
+        'Pembayaran Anda telah berhasil diproses.'
+      );
+      
+    } catch (error) {
+      console.error('Digital payment success handler error:', error);
+      showErrorNotification('Terjadi kesalahan saat memperbarui data pembayaran');
+    } finally {
+      setUpdatingPayment(false);
+    }
+  }, [userProfile?.id, loadData, showSuccessNotification, showErrorNotification]);
+
+  const handleDigitalPaymentError = useCallback((error) => {
+    console.error('Digital payment error:', error);
+    showErrorNotification(
+      'Pembayaran Digital Gagal',
+      error.message || 'Pembayaran tidak dapat diproses'
+    );
+    setDigitalPaymentModalVisible(false);
+    setSelectedPayment(null);
+  }, [showErrorNotification]);
 
   const getStatusColor = useCallback(
     (status) => {
@@ -493,28 +556,40 @@ function StatusPembayaran() {
           )}
         </View>
 
-        {item.status === "belum_bayar" && (
-          <TouchableOpacity
-            style={[styles.payButton, { backgroundColor: colors.primary }]}
-            onPress={() => handlePayNow(item)}
-            disabled={updatingPayment}
-          >
-            <Text style={[styles.payButtonText, { color: colors.white }]}>
-              💳 Bayar Sekarang
-            </Text>
-          </TouchableOpacity>
-        )}
+        {(item.status === "belum_bayar" || item.status === "terlambat") && (
+          <View style={styles.paymentActions}>
+            {/* Manual Payment Button */}
+            <TouchableOpacity
+              style={[
+                styles.payButton, 
+                styles.manualPayButton,
+                { backgroundColor: item.status === "terlambat" ? colors.warning : colors.primary }
+              ]}
+              onPress={() => handlePayNow(item)}
+              disabled={updatingPayment}
+            >
+              <Text style={[styles.payButtonText, { color: colors.white }]}>
+                {item.status === "terlambat" ? "⚡ Bayar Segera" : "💳 Bayar Sekarang"}
+              </Text>
+            </TouchableOpacity>
 
-        {item.status === "terlambat" && (
-          <TouchableOpacity
-            style={[styles.payButton, { backgroundColor: colors.warning }]}
-            onPress={() => handlePayNow(item)}
-            disabled={updatingPayment}
-          >
-            <Text style={[styles.payButtonText, { color: colors.white }]}>
-              ⚡ Bayar Segera
-            </Text>
-          </TouchableOpacity>
+            {/* Digital Payment Button */}
+            {isDigitalPaymentEnabled && (
+              <TouchableOpacity
+                style={[
+                  styles.payButton, 
+                  styles.digitalPayButton,
+                  { backgroundColor: colors.success, borderColor: colors.success }
+                ]}
+                onPress={() => handleDigitalPayment(item)}
+                disabled={updatingPayment}
+              >
+                <Text style={[styles.payButtonText, { color: colors.white }]}>
+                  📱 Bayar Digital
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
     ),
@@ -525,7 +600,9 @@ function StatusPembayaran() {
       getStatusLabel,
       formatCurrency,
       handlePayNow,
+      handleDigitalPayment,
       updatingPayment,
+      isDigitalPaymentEnabled,
     ]
   );
 
@@ -609,19 +686,37 @@ function StatusPembayaran() {
           { backgroundColor: colors.white, borderBottomColor: colors.gray200 },
         ]}
       >
-        <Text style={[styles.title, { color: colors.gray900 }]}>
-          Status Pembayaran Bisyaroh
-        </Text>
-        {userProfile && (
-          <Text style={[styles.subtitle, { color: colors.gray600 }]}>
-            Santri: {userProfile.namaSantri}
-          </Text>
-        )}
-        {timeline && (
-          <Text style={[styles.timelineInfo, { color: colors.primary }]}>
-            Timeline: {timeline.name}
-          </Text>
-        )}
+        <View style={styles.headerContent}>
+          <View style={styles.headerText}>
+            <Text style={[styles.title, { color: colors.gray900 }]}>
+              Status Pembayaran Bisyaroh
+            </Text>
+            {userProfile && (
+              <Text style={[styles.subtitle, { color: colors.gray600 }]}>
+                Santri: {userProfile.namaSantri}
+              </Text>
+            )}
+            {timeline && (
+              <Text style={[styles.timelineInfo, { color: colors.primary }]}>
+                Timeline: {timeline.name}
+              </Text>
+            )}
+          </View>
+          
+          {/* Quick Digital Payment Button */}
+          {isDigitalPaymentEnabled && (
+            <TouchableOpacity
+              style={[styles.quickPayButton, { backgroundColor: colors.success }]}
+              onPress={() => handleDigitalPayment(null)}
+              disabled={updatingPayment}
+            >
+              <Text style={styles.quickPayIcon}>💳</Text>
+              <Text style={[styles.quickPayText, { color: colors.white }]}>
+                Top Up
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {payments.length > 0 ? (
@@ -679,6 +774,18 @@ function StatusPembayaran() {
         onPaymentSuccess={handlePaymentSuccess}
       />
 
+      <DigitalPaymentModal
+        visible={digitalPaymentModalVisible}
+        santriId={userProfile?.id}
+        timelineId={selectedPayment?.timelineId || timeline?.id}
+        periodKey={selectedPayment?.periodKey}
+        studentName={userProfile?.namaSantri}
+        requiredAmount={selectedPayment?.remainingAmount || selectedPayment?.amount}
+        onClose={() => setDigitalPaymentModalVisible(false)}
+        onPaymentSuccess={handleDigitalPaymentSuccess}
+        onPaymentError={handleDigitalPaymentError}
+      />
+
       {updatingPayment && (
         <View
           style={[
@@ -707,6 +814,14 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     borderBottomWidth: 1,
   },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  headerText: {
+    flex: 1,
+  },
   title: {
     fontSize: 20,
     fontWeight: "600",
@@ -722,6 +837,22 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 4,
     fontWeight: "500",
+  },
+  quickPayButton: {
+    flexDirection: "column",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 60,
+  },
+  quickPayIcon: {
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  quickPayText: {
+    fontSize: 10,
+    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,
@@ -882,13 +1013,25 @@ const styles = StyleSheet.create({
     flex: 1.5,
     textAlign: "right",
   },
+  paymentActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
   payButton: {
+    flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
     gap: 8,
+  },
+  manualPayButton: {
+    // Default styling dari payButton
+  },
+  digitalPayButton: {
+    borderWidth: 1,
   },
   payButtonText: {
     fontSize: 14,
