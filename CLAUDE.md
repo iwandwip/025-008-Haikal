@@ -55,6 +55,13 @@ npm run cleanup             # Interactive Firebase database cleanup
 npm run build:android:production    # Build Android APK
 npm run build:ios:production        # Build iOS IPA
 npm run build:all:preview          # Build all platforms (preview)
+npm run build:development          # Build development version for Android
+npm run submit:android             # Submit to Google Play Store
+npm run submit:ios                 # Submit to Apple App Store
+
+# EAS Configuration
+npm run eas:login              # Login to EAS
+npm run eas:configure          # Configure EAS build
 ```
 
 ## Project Structure
@@ -222,6 +229,10 @@ npm run cleanup  # Interactive Firebase cleanup tool
 ```bash
 npm run build:android:production  # Android APK
 npm run build:ios:production      # iOS IPA
+npm run build:all:preview         # All platforms (preview)
+npm run build:development         # Development build for Android
+npm run submit:android            # Submit to Google Play Store  
+npm run submit:ios               # Submit to Apple App Store
 ```
 
 ### Hardware Setup
